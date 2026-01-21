@@ -48,7 +48,7 @@ const App: React.FC = () => {
     isFeatured: false
   });
   
-  const [editingCustomOption, setEditingCustomOption] = useState<{type: string, option: RosaryOption | null}>({type: '', option: null});
+  const [editingCustomOption, setEditingCustomOption] = useState<{type: 'material' | 'color' | 'crucifix' | '', option: RosaryOption | null}>({type: '', option: null});
   const [tempCustomOption, setTempCustomOption] = useState<Partial<RosaryOption>>({ name: '', price: 0, image: '' });
 
   const [tempImageUrl, setTempImageUrl] = useState("");
@@ -173,7 +173,7 @@ const App: React.FC = () => {
       ...newProduct,
       price: Number(newProduct.price),
       stock: Number(newProduct.stock),
-      image: newProduct.images[0] // Define a primeira imagem como principal
+      image: newProduct.images[0]
     };
 
     if (editingProduct) {
@@ -189,17 +189,7 @@ const App: React.FC = () => {
       saveProductsToDB([productToAdd, ...products]);
     }
 
-    // Reset Form
-    setNewProduct({ 
-      name: '',
-      category: CATEGORIES[1], 
-      price: 0,
-      stock: 10, 
-      description: '',
-      images: [], 
-      variants: [], 
-      isFeatured: false 
-    });
+    setNewProduct({ name: '', category: CATEGORIES[1], price: 0, stock: 10, description: '', images: [], variants: [], isFeatured: false });
   };
 
   const startEditingProduct = (product: Product) => {
@@ -240,22 +230,40 @@ const App: React.FC = () => {
     }));
   };
 
+  // --- Funções do Customizador no Admin ---
   const handleSaveCustomOption = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!editingCustomOption.type) return;
+    
     const type = editingCustomOption.type as 'material' | 'color' | 'crucifix';
-    let currentList = type === 'material' ? materials : type === 'color' ? colors : crucifixes;
-    const newOpt: RosaryOption = { id: editingCustomOption.option?.id || `opt-${Date.now()}`, name: tempCustomOption.name || 'Nova Opção', price: Number(tempCustomOption.price) || 0, image: tempCustomOption.image };
-    const updatedList = editingCustomOption.option ? currentList.map(o => o.id === editingCustomOption.option?.id ? newOpt : o) : [...currentList, newOpt];
+    const currentList = type === 'material' ? materials : type === 'color' ? colors : crucifixes;
+    
+    const newOpt: RosaryOption = { 
+      id: editingCustomOption.option?.id || `opt-${Date.now()}`, 
+      name: tempCustomOption.name || 'Nova Opção', 
+      price: Number(tempCustomOption.price) || 0, 
+      image: tempCustomOption.image 
+    };
+    
+    const updatedList = editingCustomOption.option 
+      ? currentList.map(o => o.id === editingCustomOption.option?.id ? newOpt : o) 
+      : [...currentList, newOpt];
+      
     saveCustomOptions(type, updatedList);
     setEditingCustomOption({ type: '', option: null });
     setTempCustomOption({ name: '', price: 0, image: '' });
   };
 
   const deleteCustomOption = (type: 'material' | 'color' | 'crucifix', id: string) => {
-    if (window.confirm("Remover esta opção?")) {
+    if (window.confirm("Remover esta opção do customizador?")) {
       const currentList = type === 'material' ? materials : type === 'color' ? colors : crucifixes;
       saveCustomOptions(type, currentList.filter(o => o.id !== id));
     }
+  };
+
+  const startEditingCustomOption = (type: 'material' | 'color' | 'crucifix', option: RosaryOption) => {
+    setEditingCustomOption({ type, option });
+    setTempCustomOption({ ...option });
   };
 
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
@@ -289,7 +297,6 @@ const App: React.FC = () => {
             </div>
           </div>
           
-          {/* Navegação Desktop */}
           <nav className="hidden md:flex items-center space-x-8 text-[10px] font-black uppercase tracking-widest text-slate-500">
             <button onClick={() => navigateToPage(Page.Home)} className={currentPage === Page.Home ? 'text-amber-600' : ''}>Início</button>
             <button onClick={() => navigateToPage(Page.Catalog)} className={currentPage === Page.Catalog ? 'text-amber-600' : ''}>Catálogo</button>
@@ -310,7 +317,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Menu Mobile Overlay */}
         {isMenuOpen && (
           <div className="md:hidden absolute top-full left-0 w-full bg-white border-b border-slate-100 shadow-xl animate-in slide-in-from-top duration-300">
             <nav className="flex flex-col p-6 space-y-6 text-[11px] font-black uppercase tracking-[0.2em] text-slate-600">
@@ -559,7 +565,6 @@ const App: React.FC = () => {
                         </div>
 
                         <form onSubmit={handleSaveProduct} className="space-y-8">
-                          {/* Informações Básicas */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                               <label className="text-[10px] font-black uppercase text-slate-400">Nome do Artigo</label>
@@ -591,7 +596,6 @@ const App: React.FC = () => {
                             <textarea rows={4} placeholder="Conte a história do produto..." value={newProduct.description || ''} className="w-full p-4 bg-slate-50 border rounded-2xl outline-none" onChange={e => setNewProduct(p => ({ ...p, description: e.target.value }))} required />
                           </div>
 
-                          {/* Gestão de Imagens */}
                           <div className="space-y-4 p-6 bg-slate-50 rounded-[32px] border border-slate-100">
                              <label className="text-[10px] font-black uppercase text-slate-400">Galeria de Imagens</label>
                              <div className="flex gap-2">
@@ -608,7 +612,6 @@ const App: React.FC = () => {
                              </div>
                           </div>
 
-                          {/* Gestão de Variantes */}
                           <div className="space-y-4 p-6 bg-slate-50 rounded-[32px] border border-slate-100">
                              <label className="text-[10px] font-black uppercase text-slate-400">Variantes (Opcional)</label>
                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -672,26 +675,102 @@ const App: React.FC = () => {
                         </div>
                       </div>
                     )}
+
                     {adminTab === 'customizer' && (
-                       <div className="space-y-6">
-                          <h3 className="text-xl md:text-2xl font-serif">Configuração do Customizador</h3>
-                          <p className="text-slate-400 italic text-sm">Gerencie os materiais, cores e crucifixos disponíveis para o "Monte seu Terço".</p>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                             {/* Placeholder para os controles de materiais/cores que seguem o mesmo padrão de formulário */}
-                             <div className="p-6 bg-slate-50 rounded-2xl border text-center">
-                                <p className="font-bold mb-2">Materiais</p>
-                                <p className="text-[10px] text-slate-400 mb-4">{materials.length} opções ativas</p>
-                                <button className="text-[10px] font-black uppercase text-amber-600">Configurar</button>
+                       <div className="space-y-12">
+                          <div className="flex justify-between items-center">
+                            <h3 className="text-xl md:text-2xl font-serif">Configuração do Customizador</h3>
+                            {editingCustomOption.type && (
+                              <button onClick={() => {
+                                setEditingCustomOption({type: '', option: null});
+                                setTempCustomOption({name: '', price: 0, image: ''});
+                              }} className="text-[10px] font-black uppercase text-red-500 underline">Cancelar Edição de Opção</button>
+                            )}
+                          </div>
+
+                          <form onSubmit={handleSaveCustomOption} className="bg-slate-50 p-8 rounded-[40px] border border-slate-100 space-y-6">
+                            <h4 className="text-[11px] font-black uppercase text-slate-400 tracking-widest">{editingCustomOption.option ? 'Editar' : 'Adicionar Nova'} Opção de Terço</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                               <select className="p-4 bg-white border rounded-2xl outline-none" value={editingCustomOption.type} onChange={e => setEditingCustomOption(prev => ({...prev, type: e.target.value as any}))} required>
+                                  <option value="">Selecione o Tipo...</option>
+                                  <option value="material">Material das Contas</option>
+                                  <option value="color">Cor Principal</option>
+                                  <option value="crucifix">Crucifixo / Cruz</option>
+                               </select>
+                               <input type="text" placeholder="Nome da Opção" value={tempCustomOption.name || ''} className="p-4 bg-white border rounded-2xl outline-none" onChange={e => setTempCustomOption({...tempCustomOption, name: e.target.value})} required />
+                               <input type="number" step="0.01" placeholder="Preço Adicional" value={tempCustomOption.price || 0} className="p-4 bg-white border rounded-2xl outline-none" onChange={e => setTempCustomOption({...tempCustomOption, price: Number(e.target.value)})} />
+                               <button type="submit" className="bg-amber-600 text-white p-4 rounded-2xl font-black uppercase text-[10px] shadow-lg">Salvar Opção</button>
+                            </div>
+                            {(editingCustomOption.type === 'material' || editingCustomOption.type === 'crucifix') && (
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-slate-400">URL da Imagem de Prévia</label>
+                                <input type="text" placeholder="https://..." value={tempCustomOption.image || ''} className="w-full p-4 bg-white border rounded-2xl outline-none" onChange={e => setTempCustomOption({...tempCustomOption, image: e.target.value})} />
+                              </div>
+                            )}
+                          </form>
+
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                             {/* Coluna Materiais */}
+                             <div className="space-y-4">
+                                <h5 className="font-black text-[10px] uppercase text-slate-500 tracking-widest border-b pb-2">Contas ({materials.length})</h5>
+                                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 no-scrollbar">
+                                   {materials.map(m => (
+                                      <div key={m.id} className="flex items-center justify-between p-3 bg-white border rounded-xl hover:shadow-md transition-shadow">
+                                         <div className="flex items-center gap-3 truncate">
+                                            <img src={m.image} className="w-8 h-8 rounded object-cover border" alt="" />
+                                            <div>
+                                               <p className="font-bold text-xs truncate">{m.name}</p>
+                                               <p className="text-[9px] text-amber-600 font-bold">+ R$ {m.price.toFixed(2)}</p>
+                                            </div>
+                                         </div>
+                                         <div className="flex gap-2">
+                                            <button onClick={() => startEditingCustomOption('material', m)} className="text-amber-500 text-[9px] font-black uppercase">Ed</button>
+                                            <button onClick={() => deleteCustomOption('material', m.id)} className="text-red-500 text-[9px] font-black uppercase">X</button>
+                                         </div>
+                                      </div>
+                                   ))}
+                                </div>
                              </div>
-                             <div className="p-6 bg-slate-50 rounded-2xl border text-center">
-                                <p className="font-bold mb-2">Cores</p>
-                                <p className="text-[10px] text-slate-400 mb-4">{colors.length} opções ativas</p>
-                                <button className="text-[10px] font-black uppercase text-amber-600">Configurar</button>
+
+                             {/* Coluna Cores */}
+                             <div className="space-y-4">
+                                <h5 className="font-black text-[10px] uppercase text-slate-500 tracking-widest border-b pb-2">Cores ({colors.length})</h5>
+                                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 no-scrollbar">
+                                   {colors.map(c => (
+                                      <div key={c.id} className="flex items-center justify-between p-3 bg-white border rounded-xl hover:shadow-md transition-shadow">
+                                         <div className="truncate">
+                                            <p className="font-bold text-xs truncate">{c.name}</p>
+                                            <p className="text-[9px] text-amber-600 font-bold">+ R$ {c.price.toFixed(2)}</p>
+                                         </div>
+                                         <div className="flex gap-2">
+                                            <button onClick={() => startEditingCustomOption('color', c)} className="text-amber-500 text-[9px] font-black uppercase">Ed</button>
+                                            <button onClick={() => deleteCustomOption('color', c.id)} className="text-red-500 text-[9px] font-black uppercase">X</button>
+                                         </div>
+                                      </div>
+                                   ))}
+                                </div>
                              </div>
-                             <div className="p-6 bg-slate-50 rounded-2xl border text-center">
-                                <p className="font-bold mb-2">Crucifixos</p>
-                                <p className="text-[10px] text-slate-400 mb-4">{crucifixes.length} opções ativas</p>
-                                <button className="text-[10px] font-black uppercase text-amber-600">Configurar</button>
+
+                             {/* Coluna Crucifixos */}
+                             <div className="space-y-4">
+                                <h5 className="font-black text-[10px] uppercase text-slate-500 tracking-widest border-b pb-2">Crucifixos ({crucifixes.length})</h5>
+                                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 no-scrollbar">
+                                   {crucifixes.map(x => (
+                                      <div key={x.id} className="flex items-center justify-between p-3 bg-white border rounded-xl hover:shadow-md transition-shadow">
+                                         <div className="flex items-center gap-3 truncate">
+                                            <img src={x.image} className="w-8 h-8 rounded object-cover border" alt="" />
+                                            <div>
+                                               <p className="font-bold text-xs truncate">{x.name}</p>
+                                               <p className="text-[9px] text-amber-600 font-bold">+ R$ {x.price.toFixed(2)}</p>
+                                            </div>
+                                         </div>
+                                         <div className="flex gap-2">
+                                            <button onClick={() => startEditingCustomOption('crucifix', x)} className="text-amber-500 text-[9px] font-black uppercase">Ed</button>
+                                            <button onClick={() => deleteCustomOption('crucifix', x.id)} className="text-red-500 text-[9px] font-black uppercase">X</button>
+                                         </div>
+                                      </div>
+                                   ))}
+                                </div>
                              </div>
                           </div>
                        </div>
