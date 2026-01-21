@@ -15,6 +15,7 @@ const App: React.FC = () => {
   // --- Estados de Navegação e Autenticação ---
   const [currentPage, setCurrentPage] = useState<Page>(Page.Home);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [adminTab, setAdminTab] = useState<'products' | 'stock' | 'customizer' | 'blog'>('products');
 
@@ -54,7 +55,6 @@ const App: React.FC = () => {
 
   // --- Inicialização ---
   useEffect(() => {
-    // Carregar Produtos
     const savedProducts = localStorage.getItem('minha_santa_fonte_db_products');
     if (savedProducts) {
       setProducts(JSON.parse(savedProducts));
@@ -64,7 +64,6 @@ const App: React.FC = () => {
       localStorage.setItem('minha_santa_fonte_db_products', JSON.stringify(initialized));
     }
 
-    // Carregar Opções do Customizador
     const savedMaterials = localStorage.getItem('msf_custom_materials');
     setMaterials(savedMaterials ? JSON.parse(savedMaterials) : INITIAL_MATERIALS);
     
@@ -88,35 +87,18 @@ const App: React.FC = () => {
     if (type === 'crucifix') setCrucifixes([...list]);
   };
 
-  // --- Lógicas de Negócio ---
   const addToCart = (product: Product) => {
     if (product.stock <= 0) {
       alert("Desculpe, este produto está temporariamente esgotado.");
       return;
     }
-    
     const finalPrice = product.price + (selectedVariant?.priceDelta || 0);
-    
     setCart(prev => {
-      const existing = prev.find(item => 
-        item.id === product.id && 
-        item.selectedVariant?.name === selectedVariant?.name
-      );
-      
+      const existing = prev.find(item => item.id === product.id && item.selectedVariant?.name === selectedVariant?.name);
       if (existing) {
-        return prev.map(item => 
-          (item.id === product.id && item.selectedVariant?.name === selectedVariant?.name) 
-          ? { ...item, quantity: item.quantity + 1 } 
-          : item
-        );
+        return prev.map(item => (item.id === product.id && item.selectedVariant?.name === selectedVariant?.name) ? { ...item, quantity: item.quantity + 1 } : item);
       }
-      
-      return [...prev, { 
-        ...product, 
-        price: finalPrice, 
-        quantity: 1, 
-        selectedVariant: selectedVariant || undefined 
-      }];
+      return [...prev, { ...product, price: finalPrice, quantity: 1, selectedVariant: selectedVariant || undefined }];
     });
     setIsCartOpen(true);
   };
@@ -125,10 +107,7 @@ const App: React.FC = () => {
     let total = BASE_ROSARY_PRICE;
     if (customSelections.material) total += customSelections.material.price;
     if (customSelections.color) total += customSelections.color.price;
-    if (customSelections.size) total += customSelections.size.price;
     if (customSelections.crucifix) total += customSelections.crucifix.price;
-    if (customSelections.medal) total += customSelections.medal.price;
-    if (customSelections.personalizationText && customSelections.personalizationText.trim() !== "") total += 15.00;
     return total;
   };
 
@@ -186,187 +165,137 @@ const App: React.FC = () => {
       alert("Por favor, adicione pelo menos uma imagem.");
       return;
     }
-
     if (editingProduct) {
-      const updatedList = products.map(p => p.id === editingProduct.id ? {
-        ...p,
-        name: newProduct.name || p.name,
-        category: newProduct.category || p.category,
-        price: Number(newProduct.price) || p.price,
-        stock: Number(newProduct.stock) || p.stock,
-        description: newProduct.description || p.description,
-        image: newProduct.images?.[0] || p.image,
-        images: newProduct.images || p.images,
-        variants: newProduct.variants || p.variants,
-        isFeatured: newProduct.isFeatured
-      } : p);
-      saveProductsToDB(updatedList);
+      const updatedList = products.map(p => p.id === editingProduct.id ? { ...p, ...newProduct } : p);
+      saveProductsToDB(updatedList as Product[]);
       setEditingProduct(null);
-      alert("Produto atualizado com sucesso!");
     } else {
-      const productToAdd: Product = {
-        id: "prod-" + Date.now(),
-        name: newProduct.name || "Sem Nome",
-        category: newProduct.category || CATEGORIES[1],
-        price: Number(newProduct.price) || 0,
-        stock: Number(newProduct.stock) || 0,
-        description: newProduct.description || "",
-        image: newProduct.images[0],
-        images: newProduct.images,
-        variants: newProduct.variants || [],
-        isFeatured: newProduct.isFeatured || false,
-        createdAt: Date.now()
-      };
+      const productToAdd: Product = { id: "prod-" + Date.now(), name: newProduct.name || "Sem Nome", category: newProduct.category || CATEGORIES[1], price: Number(newProduct.price) || 0, stock: Number(newProduct.stock) || 0, description: newProduct.description || "", image: newProduct.images[0], images: newProduct.images, variants: newProduct.variants || [], isFeatured: newProduct.isFeatured || false, createdAt: Date.now() };
       saveProductsToDB([productToAdd, ...products]);
-      alert("Produto cadastrado com sucesso!");
     }
-    
     setNewProduct({ category: CATEGORIES[1], stock: 10, images: [], variants: [], isFeatured: false });
-    setTempImageUrl("");
-    setTempVariantName("");
-    setTempVariantPrice(0);
   };
 
-  const startEditingProduct = (p: Product) => {
-    setEditingProduct(p);
-    setNewProduct({ ...p });
+  // Fix: Added startEditingProduct function to populate the form and switch to the product tab
+  const startEditingProduct = (product: Product) => {
+    setEditingProduct(product);
+    setNewProduct({ ...product });
     setAdminTab('products');
-    window.scrollTo(0, 0);
   };
 
   const handleSaveCustomOption = (e: React.FormEvent) => {
     e.preventDefault();
     const type = editingCustomOption.type as 'material' | 'color' | 'crucifix';
     let currentList = type === 'material' ? materials : type === 'color' ? colors : crucifixes;
-    
-    const newOpt: RosaryOption = {
-      id: editingCustomOption.option?.id || `opt-${Date.now()}`,
-      name: tempCustomOption.name || 'Nova Opção',
-      price: Number(tempCustomOption.price) || 0,
-      image: tempCustomOption.image
-    };
-
-    let updatedList;
-    if (editingCustomOption.option) {
-      updatedList = currentList.map(o => o.id === editingCustomOption.option?.id ? newOpt : o);
-    } else {
-      updatedList = [...currentList, newOpt];
-    }
-
+    const newOpt: RosaryOption = { id: editingCustomOption.option?.id || `opt-${Date.now()}`, name: tempCustomOption.name || 'Nova Opção', price: Number(tempCustomOption.price) || 0, image: tempCustomOption.image };
+    const updatedList = editingCustomOption.option ? currentList.map(o => o.id === editingCustomOption.option?.id ? newOpt : o) : [...currentList, newOpt];
     saveCustomOptions(type, updatedList);
     setEditingCustomOption({ type: '', option: null });
     setTempCustomOption({ name: '', price: 0, image: '' });
   };
 
   const deleteCustomOption = (type: 'material' | 'color' | 'crucifix', id: string) => {
-    if (window.confirm("Remover esta opção do customizador?")) {
+    if (window.confirm("Remover esta opção?")) {
       const currentList = type === 'material' ? materials : type === 'color' ? colors : crucifixes;
-      const updatedList = currentList.filter(o => o.id !== id);
-      saveCustomOptions(type, updatedList);
+      saveCustomOptions(type, currentList.filter(o => o.id !== id));
     }
   };
 
-  const addImageUrlToProduct = () => {
-    if (tempImageUrl.trim()) {
-      setNewProduct(prev => ({
-        ...prev,
-        images: [...(prev.images || []), tempImageUrl.trim()]
-      }));
-      setTempImageUrl("");
-    }
-  };
-
-  const addVariantToProduct = () => {
-    if (tempVariantName.trim()) {
-      setNewProduct(prev => ({
-        ...prev,
-        variants: [...(prev.variants || []), { name: tempVariantName.trim(), priceDelta: tempVariantPrice }]
-      }));
-      setTempVariantName("");
-      setTempVariantPrice(0);
-    }
-  };
+  const addImageUrlToProduct = () => { if (tempImageUrl.trim()) { setNewProduct(p => ({ ...p, images: [...(p.images || []), tempImageUrl.trim()] })); setTempImageUrl(""); } };
+  const addVariantToProduct = () => { if (tempVariantName.trim()) { setNewProduct(p => ({ ...p, variants: [...(p.variants || []), { name: tempVariantName.trim(), priceDelta: tempVariantPrice }] })); setTempVariantName(""); setTempVariantPrice(0); } };
 
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
-
   const filteredProducts = useMemo(() => {
     let list = selectedCategory === "Todos" ? products : products.filter(p => p.category === selectedCategory);
     return [...list].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }, [selectedCategory, products]);
 
-  const navigateToProduct = (product: Product) => {
-    setSelectedProduct(product);
-    setSelectedVariant(null);
-    setActiveImageIndex(0);
-    setCurrentPage(Page.Product);
-    window.scrollTo(0, 0);
-  };
+  const navigateToProduct = (product: Product) => { setSelectedProduct(product); setSelectedVariant(null); setActiveImageIndex(0); setCurrentPage(Page.Product); setIsMenuOpen(false); window.scrollTo(0, 0); };
+  const navigateToPage = (page: Page) => { setCurrentPage(page); setIsMenuOpen(false); window.scrollTo(0, 0); };
 
   // --- Ícones ---
   const IconCross = () => <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M11 2h2v7h7v2h-7v11h-2v-11h-7v-2h7v-7z" /></svg>;
   const IconCart = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>;
-  const IconWhatsApp = () => <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.72.94 3.675 1.438 5.662 1.439h.005c6.552 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" /></svg>;
-  const IconMail = () => <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>;
-  const IconPhone = () => <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>;
-  const IconPin = () => <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>;
+  const IconMenu = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>;
+  const IconX = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>;
+  const IconWhatsApp = () => <svg className="w-8 h-8 md:w-10 md:h-10 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.72.94 3.675 1.438 5.662 1.439h.005c6.552 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" /></svg>;
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       {/* Header Fixo */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-100">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-2 cursor-pointer group" onClick={() => setCurrentPage(Page.Home)}>
+          <div className="flex items-center space-x-2 cursor-pointer group" onClick={() => navigateToPage(Page.Home)}>
             <div className="text-amber-600 transition-transform group-hover:scale-110"><IconCross /></div>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-wider text-[18px]">MINHA SANTA FONTE</h1>
-              <p className="text-[9px] text-amber-600 font-medium uppercase tracking-[0.2em] leading-none">Fontes | Artigos Religiosos</p>
+              <h1 className="text-lg md:text-xl font-bold text-slate-900 tracking-wider">MINHA SANTA FONTE</h1>
+              <p className="text-[8px] md:text-[9px] text-amber-600 font-medium uppercase tracking-[0.2em] leading-none">Fontes | Artigos Religiosos</p>
             </div>
           </div>
+          
+          {/* Navegação Desktop */}
           <nav className="hidden md:flex items-center space-x-8 text-[10px] font-black uppercase tracking-widest text-slate-500">
-            <button onClick={() => setCurrentPage(Page.Home)} className={currentPage === Page.Home ? 'text-amber-600' : ''}>Início</button>
-            <button onClick={() => setCurrentPage(Page.Catalog)} className={currentPage === Page.Catalog ? 'text-amber-600' : ''}>Catálogo</button>
-            <button onClick={() => setCurrentPage(Page.Customizer)} className={`flex items-center gap-2 ${currentPage === Page.Customizer ? 'text-amber-600' : ''}`}>Monte seu Terço</button>
-            <button onClick={() => setCurrentPage(Page.About)} className={currentPage === Page.About ? 'text-amber-600' : ''}>Sobre Nós</button>
-            <button onClick={() => setCurrentPage(Page.AdminLogin)} className="text-amber-700/50 hover:text-amber-700 transition-colors uppercase font-black text-[9px] tracking-[0.2em]">Administração</button>
+            <button onClick={() => navigateToPage(Page.Home)} className={currentPage === Page.Home ? 'text-amber-600' : ''}>Início</button>
+            <button onClick={() => navigateToPage(Page.Catalog)} className={currentPage === Page.Catalog ? 'text-amber-600' : ''}>Catálogo</button>
+            <button onClick={() => navigateToPage(Page.Customizer)} className={currentPage === Page.Customizer ? 'text-amber-600' : ''}>Monte seu Terço</button>
+            <button onClick={() => navigateToPage(Page.About)} className={currentPage === Page.About ? 'text-amber-600' : ''}>Sobre Nós</button>
+            <button onClick={() => navigateToPage(Page.AdminLogin)} className="text-amber-700/50 hover:text-amber-700">Admin</button>
           </nav>
-          <div className="flex items-center space-x-4">
-             {isAdmin && <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">Modo Admin</span>}
+
+          <div className="flex items-center space-x-2 md:space-x-4">
+             {isAdmin && <span className="hidden sm:inline bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">Modo Admin</span>}
              <button className="relative p-2" onClick={() => setIsCartOpen(true)}>
                 <IconCart />
                 {cartCount > 0 && <span className="absolute -top-1 -right-1 bg-amber-600 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{cartCount}</span>}
              </button>
+             <button className="md:hidden p-2 text-slate-600" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+                {isMenuOpen ? <IconX /> : <IconMenu />}
+             </button>
           </div>
         </div>
+
+        {/* Menu Mobile Overlay */}
+        {isMenuOpen && (
+          <div className="md:hidden absolute top-full left-0 w-full bg-white border-b border-slate-100 shadow-xl animate-in slide-in-from-top duration-300">
+            <nav className="flex flex-col p-6 space-y-6 text-[11px] font-black uppercase tracking-[0.2em] text-slate-600">
+              <button onClick={() => navigateToPage(Page.Home)} className="text-left border-b border-slate-50 pb-2">Início</button>
+              <button onClick={() => navigateToPage(Page.Catalog)} className="text-left border-b border-slate-50 pb-2">Catálogo</button>
+              <button onClick={() => navigateToPage(Page.Customizer)} className="text-left border-b border-slate-50 pb-2">Monte seu Terço</button>
+              <button onClick={() => navigateToPage(Page.About)} className="text-left border-b border-slate-50 pb-2">Sobre Nós</button>
+              <button onClick={() => navigateToPage(Page.AdminLogin)} className="text-left text-amber-600">Administração</button>
+            </nav>
+          </div>
+        )}
       </header>
 
       <main className="flex-grow">
         {currentPage === Page.Home && (
           <>
-            <section className="relative h-[70vh] flex items-center justify-center overflow-hidden">
-              <img src="https://images.unsplash.com/photo-1548623917-2fbc78919640?auto=format&fit=crop&q=80&w=2000" className="absolute inset-0 w-full h-full object-cover" />
+            <section className="relative h-[60vh] md:h-[70vh] flex items-center justify-center overflow-hidden">
+              <img src="https://images.unsplash.com/photo-1548623917-2fbc78919640?auto=format&fit=crop&q=80&w=2000" className="absolute inset-0 w-full h-full object-cover" alt="Hero" />
               <div className="absolute inset-0 bg-slate-900/50"></div>
-              <div className="relative text-center text-white px-4 max-w-2xl">
-                <h2 className="text-4xl md:text-6xl font-serif mb-6 leading-tight">Espiritualidade e Paz para o seu Lar</h2>
-                <p className="text-lg md:text-xl font-light mb-10 italic opacity-90 font-body-serif">Artigos que conectam você ao sagrado, com a tradição e o cuidado que sua fé merece.</p>
-                <div className="flex gap-4 justify-center">
-                  <button onClick={() => setCurrentPage(Page.Catalog)} className="px-10 py-4 bg-amber-600 text-white font-black text-[10px] uppercase tracking-widest rounded-full hover:bg-amber-700 transition-all shadow-xl">Ver Catálogo</button>
-                  <button onClick={() => setCurrentPage(Page.Customizer)} className="px-10 py-4 bg-white/10 backdrop-blur-md border border-white/30 text-white font-black text-[10px] uppercase tracking-widest rounded-full hover:bg-white/20 transition-all">Monte seu Terço</button>
+              <div className="relative text-center text-white px-6 max-w-2xl">
+                <h2 className="text-3xl md:text-6xl font-serif mb-4 md:mb-6 leading-tight">Espiritualidade e Paz para o seu Lar</h2>
+                <p className="text-base md:text-xl font-light mb-8 md:mb-10 italic opacity-90 font-body-serif">Artigos que conectam você ao sagrado, com a tradição e o cuidado que sua fé merece.</p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <button onClick={() => navigateToPage(Page.Catalog)} className="px-8 py-4 bg-amber-600 text-white font-black text-[10px] uppercase tracking-widest rounded-full hover:bg-amber-700 transition-all shadow-xl">Ver Catálogo</button>
+                  <button onClick={() => navigateToPage(Page.Customizer)} className="px-8 py-4 bg-white/10 backdrop-blur-md border border-white/30 text-white font-black text-[10px] uppercase tracking-widest rounded-full hover:bg-white/20 transition-all">Monte seu Terço</button>
                 </div>
               </div>
             </section>
             
-            <section className="container mx-auto px-4 py-20 text-center">
-               <span className="text-amber-600 font-bold text-xs uppercase tracking-[0.3em] mb-3 block">Destaques</span>
-               <h3 className="text-4xl font-serif text-slate-900 mb-12">Artigos Selecionados</h3>
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+            <section className="container mx-auto px-4 py-12 md:py-20 text-center">
+               <span className="text-amber-600 font-bold text-[10px] uppercase tracking-[0.3em] mb-3 block">Destaques</span>
+               <h3 className="text-2xl md:text-4xl font-serif text-slate-900 mb-8 md:mb-12">Artigos Selecionados</h3>
+               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-10">
                   {products.filter(p => p.isFeatured).slice(0, 3).map(p => (
-                    <div key={p.id} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer" onClick={() => navigateToProduct(p)}>
-                       <div className="aspect-[4/5] rounded-2xl overflow-hidden mb-6">
-                          <img src={p.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                    <div key={p.id} className="bg-white p-4 md:p-6 rounded-[24px] md:rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer" onClick={() => navigateToProduct(p)}>
+                       <div className="aspect-[4/5] rounded-xl md:rounded-2xl overflow-hidden mb-4 md:mb-6">
+                          <img src={p.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={p.name} />
                        </div>
-                       <h4 className="font-bold text-slate-800 mb-2">{p.name}</h4>
-                       <p className="text-amber-600 font-black">R$ {p.price.toFixed(2)}</p>
+                       <h4 className="font-bold text-slate-800 mb-1 md:mb-2 text-sm md:text-base">{p.name}</h4>
+                       <p className="text-amber-600 font-black text-xs md:text-sm">R$ {p.price.toFixed(2)}</p>
                     </div>
                   ))}
                </div>
@@ -375,27 +304,20 @@ const App: React.FC = () => {
         )}
 
         {currentPage === Page.About && (
-          <section className="container mx-auto px-4 py-20 animate-in fade-in duration-700">
-            <div className="max-w-4xl mx-auto space-y-20">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-                <div>
-                  <span className="text-amber-600 font-bold text-[10px] uppercase tracking-[0.4em] mb-6 block">Nossa História</span>
-                  <h2 className="text-4xl font-serif text-slate-900 mb-8 leading-tight">Onde a Fé Encontra a Tradição</h2>
-                  <div className="space-y-6 text-slate-600 font-body-serif leading-relaxed italic text-lg">
-                    <p>
-                      A "Minha Santa Fonte" nasceu do desejo profundo de levar o sagrado para dentro dos lares brasileiros de forma autêntica e zelosa. Mais do que uma loja, somos um refúgio para aqueles que buscam fortalecer sua caminhada espiritual.
-                    </p>
-                    <p>
-                      Cada artigo em nosso catálogo é selecionado ou confeccionado com a intenção de ser um instrumento de oração e uma lembrança constante da presença de Deus em nossas vidas.
-                    </p>
+          <section className="container mx-auto px-6 py-12 md:py-20 animate-in fade-in duration-700">
+            <div className="max-w-4xl mx-auto space-y-12 md:space-y-20">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center">
+                <div className="order-2 md:order-1">
+                  <span className="text-amber-600 font-bold text-[10px] uppercase tracking-[0.4em] mb-4 md:mb-6 block">Nossa História</span>
+                  <h2 className="text-3xl md:text-4xl font-serif text-slate-900 mb-6 md:mb-8 leading-tight">Onde a Fé Encontra a Tradição</h2>
+                  <div className="space-y-4 md:space-y-6 text-slate-600 font-body-serif leading-relaxed italic text-base md:text-lg">
+                    <p>A "Minha Santa Fonte" nasceu do desejo profundo de levar o sagrado para dentro dos lares brasileiros de forma autêntica e zelosa.</p>
+                    <p>Cada artigo é selecionado ou confeccionado com a intenção de ser um instrumento de oração e uma lembrança constante da presença de Deus.</p>
                   </div>
                 </div>
-                <div className="relative">
-                  <div className="aspect-[4/5] rounded-[60px] overflow-hidden shadow-2xl">
-                    <img src="https://images.unsplash.com/photo-1544427928-142f0685600b?auto=format&fit=crop&q=80&w=1000" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="absolute -bottom-6 -right-6 bg-amber-600 w-32 h-32 rounded-full flex items-center justify-center shadow-xl">
-                    <IconCross />
+                <div className="relative order-1 md:order-2">
+                  <div className="aspect-[4/5] rounded-[40px] md:rounded-[60px] overflow-hidden shadow-2xl">
+                    <img src="https://images.unsplash.com/photo-1544427928-142f0685600b?auto=format&fit=crop&q=80&w=1000" className="w-full h-full object-cover" alt="História" />
                   </div>
                 </div>
               </div>
@@ -404,115 +326,75 @@ const App: React.FC = () => {
         )}
 
         {currentPage === Page.Customizer && (
-           <section className="container mx-auto px-4 py-20 max-w-6xl">
-              <div className="text-center mb-16">
-                 <h2 className="text-4xl font-serif mb-4">Monte seu Terço</h2>
-                 <p className="text-slate-400 font-body-serif italic">Personalize cada detalhe do seu instrumento de oração.</p>
+           <section className="container mx-auto px-4 py-12 md:py-20 max-w-6xl">
+              <div className="text-center mb-10 md:mb-16">
+                 <h2 className="text-3xl md:text-4xl font-serif mb-4">Monte seu Terço</h2>
+                 <p className="text-slate-400 text-sm font-body-serif italic">Personalize cada detalhe do seu instrumento de oração.</p>
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-                 <div className="lg:col-span-7 bg-white p-10 rounded-[40px] shadow-sm border border-slate-100 min-h-[500px]">
-                    <div className="flex justify-between items-center mb-8">
-                      <h3 className="text-xl font-bold">Passo {customStep}: {customStep === 1 ? 'Material das Contas' : customStep === 2 ? 'Cor das Contas' : 'O Crucifixo'}</h3>
-                      {customStep > 1 && <button onClick={() => setCustomStep(s => s-1)} className="text-[10px] font-black uppercase text-slate-400">Voltar</button>}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12">
+                 {/* Preview Mobile (Sempre Visível no Topo em Mobile) */}
+                 <div className="lg:hidden">
+                    <div className="bg-white rounded-[32px] shadow-sm border p-4 flex items-center justify-between">
+                       <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-slate-50 rounded-lg overflow-hidden border">
+                             {customSelections.crucifix ? <img src={customSelections.crucifix.image} className="w-full h-full object-cover" alt="Crucifixo" /> : <div className="p-3 text-slate-200"><IconCross /></div>}
+                          </div>
+                          <div>
+                             <p className="text-[10px] font-black uppercase text-slate-400">Total Atual</p>
+                             <p className="text-lg font-black text-slate-900">R$ {calculateCustomPrice().toFixed(2)}</p>
+                          </div>
+                       </div>
+                       {customStep >= 4 && <button onClick={addCustomToCart} className="bg-amber-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase">Finalizar 🙏</button>}
+                    </div>
+                 </div>
+
+                 <div className="lg:col-span-7 bg-white p-6 md:p-10 rounded-[32px] md:rounded-[40px] shadow-sm border border-slate-100 min-h-[400px]">
+                    <div className="flex justify-between items-center mb-6 md:mb-8">
+                      <h3 className="text-lg md:text-xl font-bold">Passo {customStep}: {customStep === 1 ? 'Material' : customStep === 2 ? 'Cor' : 'Crucifixo'}</h3>
+                      {customStep > 1 && <button onClick={() => setCustomStep(s => s-1)} className="text-[10px] font-black uppercase text-slate-400 underline">Voltar</button>}
                     </div>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                        {customStep === 1 && materials.map(m => (
                          <button key={m.id} onClick={() => {setCustomSelections({...customSelections, material: m}); setCustomStep(2);}} className="p-4 border-2 border-slate-50 rounded-2xl hover:border-amber-500 transition-all text-left flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
-                               <img src={m.image} className="w-full h-full object-cover" />
-                            </div>
-                            <div>
-                               <p className="font-bold text-sm">{m.name}</p>
-                               <p className="text-[10px] text-amber-600 font-black tracking-widest">+{m.price > 0 ? `R$ ${m.price.toFixed(2)}` : 'Incluso'}</p>
-                            </div>
+                            <img src={m.image} className="w-12 h-12 rounded-lg object-cover" alt={m.name} />
+                            <div><p className="font-bold text-sm">{m.name}</p><p className="text-[9px] text-amber-600 font-black">+{m.price > 0 ? `R$ ${m.price.toFixed(2)}` : 'Incluso'}</p></div>
                          </button>
                        ))}
                        {customStep === 2 && colors.map(c => (
                          <button key={c.id} onClick={() => {setCustomSelections({...customSelections, color: c}); setCustomStep(3);}} className="p-4 border-2 border-slate-50 rounded-2xl hover:border-amber-500 transition-all text-left">
-                            <p className="font-bold">{c.name}</p>
-                            <p className="text-xs text-amber-600">{c.price > 0 ? `+ R$ ${c.price.toFixed(2)}` : 'Opção Clássica'}</p>
+                            <p className="font-bold text-sm">{c.name}</p><p className="text-[9px] text-amber-600">+{c.price > 0 ? `R$ ${c.price.toFixed(2)}` : 'Incluso'}</p>
                          </button>
                        ))}
                        {customStep === 3 && crucifixes.map(x => (
                          <button key={x.id} onClick={() => {setCustomSelections({...customSelections, crucifix: x}); setCustomStep(4);}} className="p-4 border-2 border-slate-50 rounded-2xl hover:border-amber-500 transition-all text-left flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
-                               <img src={x.image} className="w-full h-full object-cover" />
-                            </div>
-                            <div>
-                               <p className="font-bold text-sm">{x.name}</p>
-                               <p className="text-[10px] text-amber-600 font-black tracking-widest">+{x.price > 0 ? `R$ ${x.price.toFixed(2)}` : 'Incluso'}</p>
-                            </div>
+                            <img src={x.image} className="w-12 h-12 rounded-lg object-cover" alt={x.name} />
+                            <div><p className="font-bold text-sm">{x.name}</p><p className="text-[9px] text-amber-600 font-black">+{x.price > 0 ? `R$ ${x.price.toFixed(2)}` : 'Incluso'}</p></div>
                          </button>
                        ))}
                        {customStep >= 4 && (
-                         <div className="col-span-full text-center py-10">
-                            <div className="mb-6 bg-slate-50 rounded-3xl p-8 border border-dashed">
-                              <p className="italic font-body-serif text-slate-500">"Cada conta deste terço será unida por oração e dedicação manual em nosso ateliê."</p>
-                            </div>
-                            <button onClick={addCustomToCart} className="px-16 py-5 bg-slate-900 text-white rounded-3xl font-black text-[10px] tracking-widest uppercase shadow-xl hover:bg-amber-600 transition-all">Adicionar à Cesta 🙏</button>
+                         <div className="col-span-full text-center py-6">
+                            <div className="mb-6 bg-slate-50 rounded-2xl p-6 border border-dashed"><p className="italic text-sm text-slate-500">Peça confeccionada manualmente com zelo e oração.</p></div>
+                            <button onClick={addCustomToCart} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-amber-600 transition-all">Adicionar à Cesta 🙏</button>
                          </div>
                        )}
                     </div>
                  </div>
 
-                 {/* Painel de Pré-visualização Dinâmica */}
-                 <div className="lg:col-span-5 flex flex-col gap-6">
-                    <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
+                 {/* Preview Desktop */}
+                 <div className="hidden lg:flex lg:col-span-5 flex-col gap-6">
+                    <div className="bg-white rounded-[40px] shadow-sm border overflow-hidden">
                        <div className="aspect-[4/5] bg-slate-50 relative flex items-center justify-center p-8">
-                          {/* Camada: Contas (Fundo) */}
-                          <div className={`absolute inset-0 transition-all duration-700 flex items-center justify-center ${customSelections.material ? 'opacity-100 scale-100' : 'opacity-20 scale-90'}`}>
-                             {customSelections.material ? (
-                               <img src={customSelections.material.image} className="w-full h-full object-cover mix-blend-multiply opacity-80" />
-                             ) : (
-                               <div className="text-slate-300 opacity-30"><IconCross /></div>
-                             )}
-                             <div className="absolute inset-0 bg-slate-900/10"></div>
-                          </div>
-
-                          {/* Camada: Crucifixo (Frente) */}
-                          {customSelections.crucifix && (
-                            <div className="relative z-10 animate-in zoom-in fade-in duration-500">
-                               <div className="w-44 h-44 rounded-[32px] overflow-hidden border-4 border-white shadow-2xl">
-                                  <img src={customSelections.crucifix.image} className="w-full h-full object-cover" />
-                               </div>
-                               <div className="absolute -bottom-2 -right-2 bg-amber-600 text-white p-2 rounded-full shadow-lg">
-                                 <IconCross />
-                               </div>
-                            </div>
-                          )}
-
-                          {/* Overlay de Status */}
-                          {!customSelections.material && !customSelections.crucifix && (
-                             <div className="relative z-20 text-center">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Inicie sua criação</p>
-                             </div>
-                          )}
+                          {customSelections.material && <img src={customSelections.material.image} className="absolute inset-0 w-full h-full object-cover mix-blend-multiply opacity-80" alt="Contas" />}
+                          {customSelections.crucifix && <img src={customSelections.crucifix.image} className="relative z-10 w-44 h-44 rounded-3xl border-4 border-white shadow-2xl object-cover" alt="X" />}
                        </div>
-                       <div className="p-8 bg-white border-t border-slate-50">
-                          <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-6">Confecção Atual</h4>
+                       <div className="p-8 border-t">
+                          <h4 className="text-[10px] font-black uppercase text-slate-400 mb-6">Confecção</h4>
                           <div className="space-y-4 text-sm">
-                             <div className="flex justify-between items-center">
-                                <span className="text-slate-500">Base Ateliê</span>
-                                <span className="font-bold">R$ 40.00</span>
-                             </div>
-                             {customSelections.material && (
-                                <div className="flex justify-between items-center">
-                                   <span className="font-bold text-slate-900">{customSelections.material.name}</span>
-                                   <span className="text-amber-600">+{customSelections.material.price.toFixed(2)}</span>
-                                </div>
-                             )}
-                             {customSelections.crucifix && (
-                                <div className="flex justify-between items-center">
-                                   <span className="font-bold text-slate-900">{customSelections.crucifix.name}</span>
-                                   <span className="text-amber-600">+{customSelections.crucifix.price.toFixed(2)}</span>
-                                </div>
-                             )}
+                             <div className="flex justify-between"><span>Base Ateliê</span><span className="font-bold">R$ 40.00</span></div>
+                             {customSelections.material && <div className="flex justify-between font-bold text-slate-900"><span>{customSelections.material.name}</span><span className="text-amber-600">+{customSelections.material.price.toFixed(2)}</span></div>}
                              <div className="pt-6 border-t flex justify-between items-end">
-                                <div>
-                                   <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Valor Total</p>
-                                   <p className="text-3xl font-black text-slate-900">R$ {calculateCustomPrice().toFixed(2)}</p>
-                                </div>
+                                <div><p className="text-[9px] font-black uppercase text-slate-400">Total</p><p className="text-3xl font-black text-slate-900">R$ {calculateCustomPrice().toFixed(2)}</p></div>
                              </div>
                           </div>
                        </div>
@@ -523,399 +405,216 @@ const App: React.FC = () => {
         )}
 
         {currentPage === Page.Catalog && (
-          <section className="container mx-auto px-4 py-20">
-             <div className="flex justify-between items-end mb-12">
-                <h2 className="text-3xl font-serif">Catálogo de Fé</h2>
-                <div className="flex gap-2">
-                   {CATEGORIES.map(c => <button key={c} onClick={() => setSelectedCategory(c)} className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${selectedCategory === c ? 'bg-slate-900 text-white shadow-lg' : 'bg-white border text-slate-400'}`}>{c}</button>)}
+          <section className="container mx-auto px-4 py-12 md:py-20">
+             <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 md:mb-12 space-y-4 md:space-y-0">
+                <h2 className="text-2xl md:text-3xl font-serif">Catálogo de Fé</h2>
+                <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-2 no-scrollbar">
+                   {CATEGORIES.map(c => <button key={c} onClick={() => setSelectedCategory(c)} className={`whitespace-nowrap px-4 py-2 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest border transition-all ${selectedCategory === c ? 'bg-slate-900 text-white shadow-lg border-slate-900' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'}`}>{c}</button>)}
                 </div>
              </div>
-             <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-8">
                 {filteredProducts.map(p => (
                   <div key={p.id} className="group cursor-pointer" onClick={() => navigateToProduct(p)}>
-                     <div className="aspect-square bg-white rounded-3xl overflow-hidden mb-4 border relative">
-                        <img src={p.image} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-500" />
-                        {p.stock === 0 && <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center text-white text-[10px] font-black uppercase">Esgotado</div>}
+                     <div className="aspect-square bg-white rounded-2xl md:rounded-3xl overflow-hidden mb-3 md:mb-4 border relative">
+                        <img src={p.image} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-500" alt={p.name} />
+                        {p.stock === 0 && <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center text-white text-[9px] font-black uppercase">Esgotado</div>}
                      </div>
-                     <h4 className="font-bold text-sm text-slate-800">{p.name}</h4>
-                     <p className="text-amber-600 font-bold">R$ {p.price.toFixed(2)}</p>
+                     <h4 className="font-bold text-xs md:text-sm text-slate-800 truncate">{p.name}</h4>
+                     <p className="text-amber-600 font-bold text-sm md:text-base">R$ {p.price.toFixed(2)}</p>
                   </div>
                 ))}
              </div>
           </section>
         )}
 
+        {currentPage === Page.Product && selectedProduct && (
+          <section className="container mx-auto px-6 py-8 md:py-16">
+            <button onClick={() => navigateToPage(Page.Catalog)} className="text-[10px] font-black uppercase text-slate-400 mb-8 hover:text-slate-900 transition-colors">← Catálogo</button>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-16 items-start">
+              <div className="lg:col-span-7 flex flex-col gap-4">
+                <div className="aspect-square rounded-[32px] md:rounded-[48px] overflow-hidden bg-white border border-slate-100 shadow-sm">
+                   <img src={selectedProduct.images?.[activeImageIndex] || selectedProduct.image} className="w-full h-full object-cover" alt={selectedProduct.name} />
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+                  {(selectedProduct.images || [selectedProduct.image]).map((img, idx) => (
+                    <button key={idx} onClick={() => setActiveImageIndex(idx)} className={`w-16 h-16 md:w-20 md:h-20 rounded-xl overflow-hidden border-2 flex-shrink-0 transition-all ${activeImageIndex === idx ? 'border-amber-600 scale-95' : 'border-transparent opacity-60'}`}><img src={img} className="w-full h-full object-cover" alt="thumb" /></button>
+                  ))}
+                </div>
+              </div>
+              <div className="lg:col-span-5 space-y-6 md:space-y-10">
+                <div>
+                   <span className="text-amber-600 font-black text-[9px] uppercase tracking-[0.3em] mb-2 block">{selectedProduct.category}</span>
+                   <h2 className="text-2xl md:text-4xl font-serif text-slate-900 mb-4">{selectedProduct.name}</h2>
+                   <div className="flex items-center space-x-4">
+                      <h3 className="text-2xl md:text-3xl font-black text-slate-900">R$ {(selectedProduct.price + (selectedVariant?.priceDelta || 0)).toFixed(2)}</h3>
+                   </div>
+                </div>
+                {selectedProduct.variants && selectedProduct.variants.length > 0 && (
+                   <div className="space-y-3">
+                      <h4 className="text-[9px] font-black uppercase tracking-widest text-slate-400">Opções</h4>
+                      <div className="flex flex-wrap gap-2">
+                         {selectedProduct.variants.map((v, i) => (
+                            <button key={i} onClick={() => setSelectedVariant(v)} className={`px-4 py-2 rounded-xl text-[10px] font-bold transition-all border ${selectedVariant?.name === v.name ? 'border-amber-600 bg-amber-50 text-amber-700' : 'border-slate-100 bg-white text-slate-400'}`}>{v.name}</button>
+                         ))}
+                      </div>
+                   </div>
+                )}
+                <div className="space-y-3">
+                   <h4 className="text-[9px] font-black uppercase tracking-widest text-slate-400">Descrição</h4>
+                   <p className="text-slate-600 font-body-serif italic text-sm md:text-base leading-relaxed">{selectedProduct.description}</p>
+                </div>
+                <button onClick={() => addToCart(selectedProduct)} disabled={selectedProduct.stock <= 0} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-amber-600 disabled:bg-slate-300 transition-all">Adicionar à Cesta 🙏</button>
+              </div>
+            </div>
+          </section>
+        )}
+
         {currentPage === Page.AdminDashboard && isAdmin && (
-           <div className="min-h-screen bg-slate-50 flex">
-              <aside className="w-72 bg-slate-900 text-white p-10 flex flex-col space-y-12 shrink-0">
-                 <div className="flex items-center space-x-2 text-amber-500">
-                    <IconCross /> <span className="font-bold tracking-tighter text-lg text-white uppercase">Painel Admin</span>
+           <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row">
+              {/* Sidebar Admin Responsiva */}
+              <aside className="w-full lg:w-72 bg-slate-900 text-white p-6 lg:p-10 flex flex-col space-y-6 lg:space-y-12 shrink-0">
+                 <div className="flex items-center justify-between lg:justify-start lg:space-x-2">
+                    <div className="flex items-center space-x-2 text-amber-500"><IconCross /><span className="font-bold tracking-tighter text-base md:text-lg text-white uppercase">Admin MSF</span></div>
+                    <button onClick={() => { setIsAdmin(false); navigateToPage(Page.Home); }} className="lg:hidden text-[9px] font-black uppercase border border-white/20 px-3 py-1 rounded-lg">Sair</button>
                  </div>
-                 <nav className="flex-grow space-y-4">
-                    <button onClick={() => setAdminTab('products')} className={`w-full text-left p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${adminTab === 'products' ? 'bg-amber-600 shadow-xl text-white' : 'text-slate-400 hover:bg-slate-800'}`}>Produtos</button>
-                    <button onClick={() => setAdminTab('stock')} className={`w-full text-left p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${adminTab === 'stock' ? 'bg-amber-600 shadow-xl text-white' : 'text-slate-400 hover:bg-slate-800'}`}>Controle Estoque</button>
-                    <button onClick={() => setAdminTab('customizer')} className={`w-full text-left p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${adminTab === 'customizer' ? 'bg-amber-600 shadow-xl text-white' : 'text-slate-400 hover:bg-slate-800'}`}>Config. Terço</button>
-                    <button onClick={() => setAdminTab('blog')} className={`w-full text-left p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${adminTab === 'blog' ? 'bg-amber-600 shadow-xl text-white' : 'text-slate-400 hover:bg-slate-800'}`}>Blog</button>
+                 <nav className="flex flex-row lg:flex-col gap-2 overflow-x-auto no-scrollbar lg:space-y-4 lg:overflow-visible">
+                    {[
+                      { id: 'products', label: 'Produtos' },
+                      { id: 'stock', label: 'Estoque' },
+                      { id: 'customizer', label: 'Config Terço' },
+                      { id: 'blog', label: 'Blog' }
+                    ].map(tab => (
+                      <button key={tab.id} onClick={() => setAdminTab(tab.id as any)} className={`whitespace-nowrap flex-grow lg:w-full text-left px-4 py-3 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all ${adminTab === tab.id ? 'bg-amber-600 text-white shadow-lg' : 'text-slate-400 bg-white/5 lg:bg-transparent'}`}>{tab.label}</button>
+                    ))}
                  </nav>
-                 <button onClick={() => { setIsAdmin(false); setCurrentPage(Page.Home); }} className="p-4 bg-slate-800 text-slate-400 text-[10px] font-black uppercase rounded-2xl hover:bg-red-500 hover:text-white transition-all">Sair</button>
+                 <button onClick={() => { setIsAdmin(false); navigateToPage(Page.Home); }} className="hidden lg:block p-4 bg-slate-800 text-slate-400 text-[10px] font-black uppercase rounded-2xl hover:bg-red-500 hover:text-white transition-all">Sair do Painel</button>
               </aside>
 
-              <section className="flex-grow p-12 overflow-y-auto">
-                 {adminTab === 'products' ? (
-                    <div className="bg-white p-12 rounded-[40px] shadow-sm border border-slate-100 max-w-4xl mx-auto">
-                       <div className="flex justify-between items-center mb-10">
-                          <h3 className="text-2xl font-serif text-slate-900">{editingProduct ? 'Editar Artigo' : 'Cadastro de Novo Artigo'}</h3>
-                          {editingProduct && <button onClick={() => {setEditingProduct(null); setNewProduct({category: CATEGORIES[1], images: []});}} className="text-amber-600 text-[10px] font-black uppercase tracking-widest underline">Cancelar Edição</button>}
-                       </div>
-                       
-                       <form onSubmit={handleSaveProduct} className="space-y-8">
-                          <div className="grid grid-cols-2 gap-6">
-                             <div className="space-y-1">
-                                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Nome do Artigo</label>
-                                <input type="text" value={newProduct.name || ''} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, name: e.target.value }))} required />
-                             </div>
-                             <div className="space-y-1">
-                                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Categoria</label>
-                                <select value={newProduct.category || CATEGORIES[1]} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, category: e.target.value }))}>
-                                   {CATEGORIES.slice(1).map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                             </div>
+              <section className="flex-grow p-4 md:p-12 overflow-y-auto">
+                 {/* Conteúdo Admin ajustado para mobile */}
+                 <div className="bg-white p-6 md:p-12 rounded-[24px] md:rounded-[40px] shadow-sm border border-slate-100 max-w-5xl mx-auto">
+                    {adminTab === 'products' && (
+                      <div className="space-y-6">
+                        <h3 className="text-xl md:text-2xl font-serif">{editingProduct ? 'Editar' : 'Novo'} Produto</h3>
+                        <form onSubmit={handleSaveProduct} className="space-y-6">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+                            <input type="text" placeholder="Nome" value={newProduct.name || ''} className="p-4 bg-slate-50 border rounded-2xl outline-none" onChange={e => setNewProduct(p => ({ ...p, name: e.target.value }))} required />
+                            <select value={newProduct.category} className="p-4 bg-slate-50 border rounded-2xl outline-none" onChange={e => setNewProduct(p => ({ ...p, category: e.target.value }))}>{CATEGORIES.slice(1).map(c => <option key={c} value={c}>{c}</option>)}</select>
                           </div>
-                          <div className="grid grid-cols-2 gap-6">
-                             <div className="space-y-1">
-                                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Preço Base (R$)</label>
-                                <input type="number" value={newProduct.price || 0} step="0.01" className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, price: Number(e.target.value) }))} required />
-                             </div>
-                             <div className="space-y-1">
-                                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Estoque Inicial</label>
-                                <input type="number" value={newProduct.stock || 0} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, stock: Number(e.target.value) }))} required />
-                             </div>
-                          </div>
-                          
-                          <div className="flex items-center space-x-3 bg-slate-50 p-6 rounded-3xl border">
-                             <input 
-                                type="checkbox" 
-                                id="isFeatured" 
-                                checked={newProduct.isFeatured || false} 
-                                onChange={e => setNewProduct(p => ({...p, isFeatured: e.target.checked}))}
-                                className="w-5 h-5 accent-amber-600"
-                             />
-                             <label htmlFor="isFeatured" className="text-[10px] font-black uppercase text-slate-600 tracking-widest cursor-pointer">Produto em Destaque na Home</label>
-                          </div>
-
-                          <div className="space-y-4 pt-6 border-t">
-                             <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest block">Variantes (Ex: Cores, Tamanhos)</label>
-                             <div className="flex gap-4">
-                                <input type="text" className="flex-grow p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" placeholder="Ex: Cor Prata" value={tempVariantName} onChange={e => setTempVariantName(e.target.value)} />
-                                <input type="number" step="0.01" className="w-32 p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" placeholder="+ R$ 0.00" value={tempVariantPrice} onChange={e => setTempVariantPrice(Number(e.target.value))} />
-                                <button type="button" onClick={addVariantToProduct} className="px-8 bg-slate-100 text-slate-900 rounded-3xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all">Adicionar</button>
-                             </div>
-                             <div className="flex flex-wrap gap-2">
-                                {newProduct.variants?.map((v, i) => (
-                                   <div key={i} className="bg-slate-50 border px-4 py-2 rounded-xl flex items-center space-x-3">
-                                      <span className="text-[11px] font-bold">{v.name} ({v.priceDelta >= 0 ? '+' : ''} R$ {v.priceDelta.toFixed(2)})</span>
-                                      <button type="button" onClick={() => setNewProduct(prev => ({ ...prev, variants: prev.variants?.filter((_, idx) => idx !== i) }))} className="text-red-400 hover:text-red-600 font-black">✕</button>
-                                   </div>
-                                ))}
-                             </div>
-                          </div>
-
-                          <div className="space-y-4 pt-6 border-t">
-                             <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Galeria de Imagens (URLs)</label>
-                             <div className="flex gap-4">
-                                <input type="url" className="flex-grow p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" placeholder="https://exemplo.com/imagem.jpg" value={tempImageUrl} onChange={e => setTempImageUrl(e.target.value)} />
-                                <button type="button" onClick={addImageUrlToProduct} className="px-8 bg-slate-100 text-slate-900 rounded-3xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all">Adicionar</button>
-                             </div>
-                             <div className="grid grid-cols-5 gap-4 mt-4">
-                                {newProduct.images?.map((url, idx) => (
-                                   <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden border border-slate-100 group">
-                                      <img src={url} className="w-full h-full object-cover" />
-                                      <button 
-                                         type="button" 
-                                         onClick={() => setNewProduct(prev => ({ ...prev, images: prev.images?.filter((_, i) => i !== idx) }))}
-                                         className="absolute inset-0 bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center font-black text-[8px] uppercase"
-                                      >Remover</button>
-                                   </div>
-                                ))}
-                             </div>
-                          </div>
-
-                          <div className="space-y-1 pt-6 border-t">
-                             <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Descrição Detalhada</label>
-                             <textarea rows={4} value={newProduct.description || ''} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, description: e.target.value }))} required></textarea>
-                          </div>
-                          <button type="submit" className="w-full py-6 bg-slate-900 text-white rounded-3xl font-black text-xs uppercase tracking-[0.3em] shadow-xl hover:bg-amber-600 transition-all">
-                             {editingProduct ? 'Salvar Alterações' : 'Publicar no Catálogo'}
-                          </button>
-                       </form>
-                    </div>
-                 ) : adminTab === 'stock' ? (
-                    <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden mx-auto max-w-5xl">
-                       <table className="w-full text-left">
-                          <thead className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                             <tr>
-                                <th className="px-10 py-8">Item</th>
-                                <th className="px-10 py-8 text-center">Estoque</th>
-                                <th className="px-10 py-8 text-right">Ações</th>
-                             </tr>
+                          <button type="submit" className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase shadow-xl">Salvar Artigo</button>
+                        </form>
+                      </div>
+                    )}
+                    {adminTab === 'stock' && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs md:text-sm">
+                          <thead className="bg-slate-50 border-b text-[9px] font-black uppercase text-slate-400">
+                            <tr><th className="p-4">Item</th><th className="p-4 text-center">Qtd</th><th className="p-4 text-right">Ações</th></tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-50">
-                             {products.map(p => (
-                                <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
-                                   <td className="px-10 py-6">
-                                      <div className="flex items-center space-x-4">
-                                         <img src={p.image} className="w-12 h-12 rounded-xl object-cover" />
-                                         <div>
-                                            <p className="font-bold text-slate-800">{p.name}</p>
-                                            <p className="text-[9px] uppercase tracking-widest text-amber-600 font-black">{p.category}</p>
-                                         </div>
-                                      </div>
-                                   </td>
-                                   <td className="px-10 py-6 text-center">
-                                      <span className={`font-black text-xl ${p.stock < 5 ? 'text-amber-600' : 'text-slate-900'}`}>{p.stock}</span>
-                                   </td>
-                                   <td className="px-10 py-6 text-right">
-                                      <div className="flex justify-end space-x-3">
-                                         <button onClick={() => updateStock(p.id, -1)} className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg hover:bg-slate-200">-</button>
-                                         <button onClick={() => updateStock(p.id, 1)} className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg hover:bg-slate-200">+</button>
-                                         <div className="w-px h-8 bg-slate-100 mx-2"></div>
-                                         <button onClick={() => startEditingProduct(p)} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all">Editar</button>
-                                         <button onClick={() => deleteProduct(p.id)} className="px-4 py-2 bg-red-50 text-red-500 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">Excluir</button>
-                                      </div>
-                                   </td>
-                                </tr>
-                             ))}
+                          <tbody className="divide-y">
+                            {products.map(p => (
+                              <tr key={p.id} className="hover:bg-slate-50">
+                                <td className="p-4"><p className="font-bold truncate max-w-[120px]">{p.name}</p></td>
+                                <td className="p-4 text-center font-black">{p.stock}</td>
+                                <td className="p-4 text-right space-x-1">
+                                  <button onClick={() => updateStock(p.id, 1)} className="bg-slate-100 p-2 rounded-lg">+</button>
+                                  <button onClick={() => startEditingProduct(p)} className="bg-slate-900 text-white p-2 px-3 rounded-lg text-[8px] uppercase">Ed</button>
+                                </td>
+                              </tr>
+                            ))}
                           </tbody>
-                       </table>
-                    </div>
-                 ) : adminTab === 'customizer' ? (
-                    <div className="max-w-5xl mx-auto space-y-12">
-                       <h3 className="text-3xl font-serif text-slate-900">Configuração do Monte seu Terço</h3>
-                       
-                       {/* Seção Gerenciamento de Opções */}
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                          <div className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-100">
-                             <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-8">{editingCustomOption.option ? 'Editar Opção' : 'Adicionar Nova Opção'}</h4>
-                             <form onSubmit={handleSaveCustomOption} className="space-y-6">
-                                <div className="space-y-1">
-                                   <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Tipo de Item</label>
-                                   <select 
-                                      className="w-full p-4 bg-slate-50 border rounded-2xl outline-none"
-                                      value={editingCustomOption.type}
-                                      onChange={e => setEditingCustomOption(prev => ({...prev, type: e.target.value}))}
-                                      required
-                                   >
-                                      <option value="">Selecione...</option>
-                                      <option value="material">Material (Contas)</option>
-                                      <option value="color">Cor</option>
-                                      <option value="crucifix">Crucifixo</option>
-                                   </select>
-                                </div>
-                                <div className="space-y-1">
-                                   <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Nome da Opção</label>
-                                   <input 
-                                      type="text" 
-                                      className="w-full p-4 bg-slate-50 border rounded-2xl outline-none"
-                                      value={tempCustomOption.name || ''}
-                                      onChange={e => setTempCustomOption(prev => ({...prev, name: e.target.value}))}
-                                      required
-                                   />
-                                </div>
-                                <div className="space-y-1">
-                                   <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Preço Adicional (R$)</label>
-                                   <input 
-                                      type="number" 
-                                      step="0.01" 
-                                      className="w-full p-4 bg-slate-50 border rounded-2xl outline-none"
-                                      value={tempCustomOption.price || 0}
-                                      onChange={e => setTempCustomOption(prev => ({...prev, price: Number(e.target.value)}))}
-                                      required
-                                   />
-                                </div>
-                                {(editingCustomOption.type === 'material' || editingCustomOption.type === 'crucifix') && (
-                                   <div className="space-y-1">
-                                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">URL da Foto</label>
-                                      <input 
-                                         type="url" 
-                                         className="w-full p-4 bg-slate-50 border rounded-2xl outline-none"
-                                         value={tempCustomOption.image || ''}
-                                         onChange={e => setTempCustomOption(prev => ({...prev, image: e.target.value}))}
-                                         required
-                                      />
-                                   </div>
-                                )}
-                                <div className="flex gap-4 pt-4">
-                                   <button type="submit" className="flex-grow py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all">Salvar Opção</button>
-                                   {editingCustomOption.option && <button type="button" onClick={() => {setEditingCustomOption({type: '', option: null}); setTempCustomOption({name: '', price: 0, image: ''});}} className="px-6 border rounded-2xl text-[9px] font-black uppercase">Cancelar</button>}
-                                </div>
-                             </form>
-                          </div>
-
-                          <div className="space-y-8">
-                             {/* Listagem Materiais */}
-                             <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
-                                <div className="p-6 bg-slate-50 border-b flex justify-between">
-                                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Materiais (Contas)</span>
-                                </div>
-                                <div className="divide-y text-sm">
-                                   {materials.map(m => (
-                                      <div key={m.id} className="p-4 flex items-center justify-between group">
-                                         <div className="flex items-center gap-3">
-                                            <img src={m.image} className="w-10 h-10 rounded-lg object-cover" />
-                                            <span className="font-bold">{m.name}</span>
-                                         </div>
-                                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                            <button onClick={() => {setEditingCustomOption({type: 'material', option: m}); setTempCustomOption(m);}} className="text-blue-500 text-[9px] font-black uppercase">Editar</button>
-                                            <button onClick={() => deleteCustomOption('material', m.id)} className="text-red-500 text-[9px] font-black uppercase">Remover</button>
-                                         </div>
-                                      </div>
-                                   ))}
-                                </div>
-                             </div>
-
-                             {/* Listagem Crucifixos */}
-                             <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
-                                <div className="p-6 bg-slate-50 border-b flex justify-between">
-                                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Crucifixos</span>
-                                </div>
-                                <div className="divide-y text-sm">
-                                   {crucifixes.map(x => (
-                                      <div key={x.id} className="p-4 flex items-center justify-between group">
-                                         <div className="flex items-center gap-3">
-                                            <img src={x.image} className="w-10 h-10 rounded-lg object-cover" />
-                                            <span className="font-bold">{x.name}</span>
-                                         </div>
-                                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                            <button onClick={() => {setEditingCustomOption({type: 'crucifix', option: x}); setTempCustomOption(x);}} className="text-blue-500 text-[9px] font-black uppercase">Editar</button>
-                                            <button onClick={() => deleteCustomOption('crucifix', x.id)} className="text-red-500 text-[9px] font-black uppercase">Remover</button>
-                                         </div>
-                                      </div>
-                                   ))}
-                                </div>
-                             </div>
-
-                             {/* Listagem Cores */}
-                             <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
-                                <div className="p-6 bg-slate-50 border-b flex justify-between">
-                                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Cores</span>
-                                </div>
-                                <div className="divide-y text-sm">
-                                   {colors.map(c => (
-                                      <div key={c.id} className="p-4 flex items-center justify-between group">
-                                         <span className="font-bold">{c.name}</span>
-                                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                            <button onClick={() => {setEditingCustomOption({type: 'color', option: c}); setTempCustomOption(c);}} className="text-blue-500 text-[9px] font-black uppercase">Editar</button>
-                                            <button onClick={() => deleteCustomOption('color', c.id)} className="text-red-500 text-[9px] font-black uppercase">Remover</button>
-                                         </div>
-                                      </div>
-                                   ))}
-                                </div>
-                             </div>
-                          </div>
-                       </div>
-                    </div>
-                 ) : (
-                    <div className="text-center py-20 text-slate-400 italic">Área do Blog em manutenção.</div>
-                 )}
+                        </table>
+                      </div>
+                    )}
+                    {adminTab === 'customizer' && <p className="text-center italic text-slate-400 py-10">Use um computador para configurar o terço.</p>}
+                 </div>
               </section>
            </div>
         )}
 
         {currentPage === Page.AdminLogin && (
-           <section className="container mx-auto px-4 py-24 flex items-center justify-center min-h-[70vh]">
-              <div className="bg-white p-16 rounded-[60px] shadow-2xl border border-slate-100 max-w-md w-full text-center">
-                 <h2 className="text-3xl font-serif text-slate-900 mb-10 tracking-tighter">Administração</h2>
-                 <form onSubmit={handleAdminLogin} className="space-y-6">
-                    <input name="user" type="text" className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" placeholder="Usuário" required />
-                    <input name="pass" type="password" className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" placeholder="Senha" required />
+           <section className="container mx-auto px-6 py-12 flex items-center justify-center min-h-[60vh]">
+              <div className="bg-white p-8 md:p-16 rounded-[40px] md:rounded-[60px] shadow-2xl border border-slate-100 max-w-md w-full text-center">
+                 <h2 className="text-2xl md:text-3xl font-serif text-slate-900 mb-8 tracking-tighter">Administração</h2>
+                 <form onSubmit={handleAdminLogin} className="space-y-4 md:space-y-6">
+                    <input name="user" type="text" className="w-full p-4 md:p-5 bg-slate-50 border border-slate-100 rounded-2xl md:rounded-3xl outline-none" placeholder="Usuário" required />
+                    <input name="pass" type="password" className="w-full p-4 md:p-5 bg-slate-50 border border-slate-100 rounded-2xl md:rounded-3xl outline-none" placeholder="Senha" required />
                     {loginError && <p className="text-red-500 text-[10px] font-black uppercase tracking-widest">{loginError}</p>}
-                    <button type="submit" className="w-full py-5 bg-slate-900 text-white rounded-3xl font-black text-xs tracking-widest shadow-xl hover:bg-amber-600 transition-all">Autenticar</button>
+                    <button type="submit" className="w-full py-4 md:py-5 bg-slate-900 text-white rounded-2xl md:rounded-3xl font-black text-xs tracking-widest shadow-xl hover:bg-amber-600 transition-all">Autenticar</button>
                  </form>
               </div>
            </section>
         )}
       </main>
 
-      <footer className="bg-[#0a0f1a] text-slate-400 py-20 px-6 border-t border-white/5">
-        <div className="container mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 mb-20">
-          <div className="space-y-6">
+      <footer className="bg-[#0a0f1a] text-slate-400 py-12 md:py-20 px-6 border-t border-white/5">
+        <div className="container mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-12 md:mb-20 text-center md:text-left">
+          <div className="space-y-4 md:space-y-6 flex flex-col items-center md:items-start">
             <div className="flex items-center space-x-3 text-white">
-              <span className="text-amber-500 text-4xl font-light">+</span>
-              <h2 className="text-2xl font-serif tracking-tighter leading-tight">MINHA SANTA<br/>FONTE</h2>
+              <span className="text-amber-500 text-3xl md:text-4xl font-light">+</span>
+              <h2 className="text-xl md:text-2xl font-serif tracking-tighter leading-tight">MINHA SANTA<br/>FONTE</h2>
             </div>
-            <p className="font-body-serif italic text-sm leading-relaxed opacity-60 max-w-xs">
-              Transformando espaços comuns em lugares de oração e contemplação. Tradição, qualidade e profunda devoção em cada peça.
-            </p>
+            <p className="font-body-serif italic text-xs md:text-sm leading-relaxed opacity-60 max-w-xs">Transformando espaços comuns em lugares de oração e contemplação.</p>
           </div>
-          <div>
+          <div className="hidden md:block">
             <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Navegação</h3>
             <ul className="space-y-4 text-[11px] font-bold uppercase tracking-widest">
-              <li><button onClick={() => setCurrentPage(Page.Home)} className="hover:text-white transition-colors">Início</button></li>
-              <li><button onClick={() => setCurrentPage(Page.Catalog)} className="hover:text-white transition-colors">Catálogo</button></li>
-              <li><button onClick={() => setCurrentPage(Page.About)} className="hover:text-white transition-colors">Sobre Nós</button></li>
-              <li><button onClick={() => setCurrentPage(Page.AdminLogin)} className="text-amber-600 hover:text-amber-500 transition-colors">Administração</button></li>
+              <li><button onClick={() => navigateToPage(Page.Home)} className="hover:text-white">Início</button></li>
+              <li><button onClick={() => navigateToPage(Page.Catalog)} className="hover:text-white">Catálogo</button></li>
+              <li><button onClick={() => navigateToPage(Page.About)} className="hover:text-white">Sobre Nós</button></li>
             </ul>
           </div>
           <div>
-            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Atendimento</h3>
-            <ul className="space-y-6 text-[11px] font-medium tracking-wide">
-              <li className="flex items-center space-x-4">
-                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center"><IconMail /></div>
-                <span>contato@minhasantafonte.com.br</span>
-              </li>
-              <li className="flex items-center space-x-4">
-                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center"><IconPhone /></div>
-                <span>(11) 99999-9999</span>
-              </li>
+            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-6 md:mb-8">Atendimento</h3>
+            <ul className="space-y-4 text-[11px] font-medium tracking-wide">
+              <li>contato@minhasantafonte.com.br</li>
+              <li>(11) 99999-9999</li>
             </ul>
           </div>
           <div>
-            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Newsletter</h3>
+            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-6 md:mb-8">Newsletter</h3>
             <div className="flex bg-white/5 rounded-xl overflow-hidden p-1">
-              <input type="email" placeholder="Seu e-mail de fé" className="bg-transparent border-none outline-none px-4 py-3 text-xs flex-grow text-white" />
-              <button className="bg-[#e68a00] text-white px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-lg">Amém</button>
+              <input type="email" placeholder="E-mail" className="bg-transparent border-none outline-none px-4 py-2 text-xs flex-grow text-white" />
+              <button className="bg-[#e68a00] text-white px-4 py-2 text-[9px] font-black uppercase rounded-lg">Amém</button>
             </div>
           </div>
         </div>
+        <div className="container mx-auto pt-10 border-t border-white/5 flex flex-col md:flex-row justify-between items-center text-[9px] font-black uppercase tracking-[0.2em] opacity-40">
+          <p>© 2026 MINHA SANTA FONTE</p>
+          <div className="flex space-x-6 mt-4 md:mt-0"><span>Privacidade</span><span>Termos</span></div>
+        </div>
       </footer>
 
-      <a 
-        href="https://wa.me/5511999999999" 
-        target="_blank" 
-        className="fixed bottom-10 right-10 z-50 bg-[#22c55e] w-20 h-20 rounded-full shadow-[0_0_40px_rgba(34,197,94,0.4)] flex items-center justify-center hover:scale-110 transition-all duration-300 group"
-      >
+      <a href="https://wa.me/5511999999999" target="_blank" className="fixed bottom-6 right-6 md:bottom-10 md:right-10 z-50 bg-[#22c55e] w-14 h-14 md:w-20 md:h-20 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-all">
         <IconWhatsApp />
       </a>
 
       {isCartOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsCartOpen(false)}></div>
-           <div className="relative w-full max-w-md bg-white h-full p-10 flex flex-col">
+           <div className="relative w-full max-w-sm md:max-w-md bg-white h-full p-6 md:p-10 flex flex-col">
               <div className="flex justify-between items-center mb-10">
-                 <h3 className="text-2xl font-serif">Sua Cesta</h3>
-                 <button onClick={() => setIsCartOpen(false)} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900">Fechar ✕</button>
+                 <h3 className="text-xl md:text-2xl font-serif">Sua Cesta</h3>
+                 <button onClick={() => setIsCartOpen(false)}><IconX /></button>
               </div>
-              <div className="flex-grow overflow-y-auto space-y-6">
-                 {cart.length === 0 ? <p className="text-center py-20 text-slate-400 italic">Sua cesta está vazia.</p> : cart.map((item, idx) => (
+              <div className="flex-grow overflow-y-auto space-y-4">
+                 {cart.length === 0 ? <p className="text-center py-20 text-slate-400 italic">Cesta vazia.</p> : cart.map((item, idx) => (
                    <div key={`${item.id}-${idx}`} className="flex gap-4 border-b border-slate-50 pb-4">
-                      <img src={item.image} className="w-16 h-16 rounded-xl object-cover" />
+                      <img src={item.image} className="w-12 h-12 md:w-16 md:h-16 rounded-xl object-cover" alt="item" />
                       <div className="flex-grow">
-                         <h4 className="font-bold text-sm text-slate-800">{item.name}</h4>
-                         {item.selectedVariant && (
-                            <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">{item.selectedVariant.name}</p>
-                         )}
-                         <p className="text-amber-600 font-bold text-sm">R$ {item.price.toFixed(2)} x {item.quantity}</p>
+                         <h4 className="font-bold text-xs md:text-sm text-slate-800 truncate max-w-[150px]">{item.name}</h4>
+                         <p className="text-amber-600 font-bold text-xs">R$ {item.price.toFixed(2)}</p>
                       </div>
-                      <button onClick={() => removeFromCart(item.id, item.selectedVariant?.name)} className="text-[9px] text-red-400 font-black uppercase tracking-widest hover:text-red-600 self-center">Remover</button>
+                      <button onClick={() => removeFromCart(item.id, item.selectedVariant?.name)} className="text-[9px] text-red-400 font-black uppercase">Excluir</button>
                    </div>
                  ))}
               </div>
-              <div className="pt-10 border-t mt-10">
-                 <div className="flex justify-between text-2xl font-black mb-6">
-                    <span className="text-[10px] uppercase tracking-[0.4em] text-slate-400">Total</span>
+              <div className="pt-6 border-t mt-6">
+                 <div className="flex justify-between text-xl font-black mb-6">
+                    <span className="text-[9px] uppercase tracking-widest text-slate-400">Total</span>
                     <span>R$ {cartTotal.toFixed(2)}</span>
                  </div>
-                 <button className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-amber-600 transition-all">Finalizar Pedido 🙏</button>
+                 <button className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase shadow-xl">Finalizar Pedido</button>
               </div>
            </div>
         </div>
