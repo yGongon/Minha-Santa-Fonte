@@ -690,7 +690,8 @@ const App: React.FC = () => {
               <img 
                 src="https://img.freepik.com/fotos-premium/jesus-cristo-crucificado-na-cruz-no-monte-golgota-morreu-pelos-pecados-da-humanidade-filho-de-deus-biblia-fe-natal-religiao-catolica-cristao-feliz-pascoa-rezando-boa-sexta-feira-generative-ai_930683-474.jpg?w=2000" 
                 className="absolute inset-0 w-full h-full object-cover scale-105 animate-[pulse_10s_ease-in-out_infinite]" 
-                alt="Hero" 
+                alt="Hero"
+                fetchPriority="high"
               />
               <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px]"></div>
               <div className="relative text-center text-white px-6 max-w-3xl space-y-6">
@@ -715,7 +716,7 @@ const App: React.FC = () => {
                       onClick={() => navigateToProduct(p)}
                     >
                        <div className="aspect-[4/5] rounded-3xl overflow-hidden mb-8 relative">
-                          <img src={p.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000 ease-out" alt={p.name} />
+                          <img src={p.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000 ease-out" alt={p.name} loading="lazy" decoding="async" />
                        </div>
                        <h4 className="font-bold text-slate-800 mb-2 text-base md:text-lg group-hover:text-amber-700 transition-colors">{p.name}</h4>
                        <p className="text-amber-600 font-black text-sm md:text-base tracking-widest">R$ {p.price.toFixed(2)}</p>
@@ -743,7 +744,7 @@ const App: React.FC = () => {
                 </div>
                 <div className="relative order-1 md:order-2 group">
                   <div className="aspect-[4/5] rounded-[60px] overflow-hidden shadow-2xl transition-all duration-700 group-hover:rounded-[40px]">
-                    <img src="https://images.unsplash.com/photo-1544427928-142f0685600b?auto=format&fit=crop&q=80&w=1000" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" alt="História" />
+                    <img src="https://images.unsplash.com/photo-1544427928-142f0685600b?auto=format&fit=crop&q=80&w=1000" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" alt="História" loading="lazy" decoding="async" />
                   </div>
                 </div>
               </div>
@@ -782,7 +783,7 @@ const App: React.FC = () => {
                               style={{ animationDelay: `${i * 100}ms` }}
                             >
                                 <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white shadow-sm group-hover:scale-110 transition-transform duration-500">
-                                  <img src={m.image} className="w-full h-full object-cover" alt={m.name} />
+                                  <img src={m.image} className="w-full h-full object-cover" alt={m.name} loading="lazy" />
                                 </div>
                                 <div><p className="font-bold text-slate-800 mb-1">{m.name}</p><p className="text-[10px] text-amber-600 font-black">+{m.price > 0 ? `R$ ${m.price.toFixed(2)}` : 'Incluso'}</p></div>
                             </button>
@@ -806,7 +807,7 @@ const App: React.FC = () => {
                               style={{ animationDelay: `${i * 100}ms` }}
                             >
                                 <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white shadow-sm group-hover:scale-110 transition-transform duration-500">
-                                  <img src={x.image} className="w-full h-full object-cover" alt={x.name} />
+                                  <img src={x.image} className="w-full h-full object-cover" alt={x.name} loading="lazy" />
                                 </div>
                                 <div><p className="font-bold text-slate-800 mb-1">{x.name}</p><p className="text-[10px] text-amber-600 font-black">+{x.price > 0 ? `R$ ${x.price.toFixed(2)}` : 'Incluso'}</p></div>
                             </button>
@@ -827,10 +828,10 @@ const App: React.FC = () => {
                     <div className="bg-white rounded-[56px] shadow-2xl border border-slate-50 overflow-hidden group">
                        <div className="aspect-[4/5] bg-slate-50 relative flex items-center justify-center p-12 overflow-hidden">
                           {customSelections.material && (
-                            <img src={customSelections.material.image} className="absolute inset-0 w-full h-full object-cover mix-blend-multiply opacity-60 animate-in fade-in scale-110 duration-1000" alt="Material" />
+                            <img src={customSelections.material.image} className="absolute inset-0 w-full h-full object-cover mix-blend-multiply opacity-60 animate-in fade-in scale-110 duration-1000" alt="Material" loading="lazy" decoding="async" />
                           )}
                           {customSelections.crucifix ? (
-                            <img src={customSelections.crucifix.image} className="relative z-10 w-56 h-56 rounded-[40px] border-8 border-white shadow-[0_40px_80px_-20px_rgba(0,0,0,0.3)] object-cover animate-in slide-in-from-bottom-10 duration-700" alt="Crucifixo" />
+                            <img src={customSelections.crucifix.image} className="relative z-10 w-56 h-56 rounded-[40px] border-8 border-white shadow-[0_40px_80px_-20px_rgba(0,0,0,0.3)] object-cover animate-in slide-in-from-bottom-10 duration-700" alt="Crucifixo" loading="lazy" decoding="async" />
                           ) : (
                             <div className="relative z-10 p-16 text-slate-200 transition-transform group-hover:scale-110 duration-1000"><IconCross /></div>
                           )}
@@ -939,7 +940,7 @@ const App: React.FC = () => {
                       onClick={() => navigateToProduct(p)}
                     >
                        <div className="aspect-square bg-white rounded-[32px] md:rounded-[48px] overflow-hidden border border-slate-100 relative shadow-sm group-hover:shadow-2xl group-hover:-translate-y-2 transition-all duration-700">
-                          <img src={p.image} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-1000 ease-in-out" alt={p.name} />
+                          <img src={p.image} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-1000 ease-in-out" alt={p.name} loading="lazy" decoding="async" />
                           {p.stock === 0 && <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center text-white text-[10px] font-black uppercase tracking-widest">Esgotado</div>}
                        </div>
                        <div className="px-2 space-y-1">
@@ -1037,6 +1038,7 @@ const App: React.FC = () => {
                     src={selectedVariant?.image || selectedProduct.images?.[activeImageIndex] || selectedProduct.image} 
                     className="w-full h-full object-cover transition-all duration-1000 ease-in-out group-hover:scale-105" 
                     alt={selectedProduct.name} 
+                    loading="lazy" decoding="async"
                    />
                    {selectedVariant?.image && (
                       <div className="absolute top-6 right-6 bg-amber-600/90 text-white px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest backdrop-blur-sm shadow-xl animate-in zoom-in duration-500">
@@ -1051,7 +1053,7 @@ const App: React.FC = () => {
                       onClick={() => {setActiveImageIndex(idx); setSelectedVariant(null);}} 
                       className={`w-20 h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden border-2 flex-shrink-0 transition-all duration-300 ${activeImageIndex === idx && !selectedVariant ? 'border-amber-600 scale-105 shadow-lg' : 'border-transparent opacity-50 hover:opacity-100 hover:scale-95'}`}
                     >
-                      <img src={img} className="w-full h-full object-cover" alt="galeria" />
+                      <img src={img} className="w-full h-full object-cover" alt="galeria" loading="lazy" />
                     </button>
                   ))}
                 </div>
@@ -1075,7 +1077,7 @@ const App: React.FC = () => {
                               onClick={() => setSelectedVariant(v)} 
                               className={`px-6 py-4 rounded-[20px] text-[11px] font-bold transition-all border flex items-center gap-3 ${selectedVariant?.name === v.name ? 'border-amber-600 bg-amber-50 text-amber-900 ring-4 ring-amber-600/10 scale-105' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-300 hover:scale-[0.98]'}`}
                             >
-                               {v.image && <img src={v.image} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" alt="" />}
+                               {v.image && <img src={v.image} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" alt="" loading="lazy" />}
                                {v.name}
                             </button>
                          ))}
@@ -1274,7 +1276,7 @@ const App: React.FC = () => {
                               <div className="flex flex-wrap gap-6">
                                  {newProduct.images?.map((img, idx) => (
                                     <div key={idx} className="relative w-32 h-32 group animate-in zoom-in-50 duration-500" style={{ animationDelay: `${idx * 100}ms` }}>
-                                       <img src={img} className="w-full h-full object-cover rounded-[32px] border-2 border-white shadow-lg transition-all duration-500 group-hover:scale-110" alt="preview" />
+                                       <img src={img} className="w-full h-full object-cover rounded-[32px] border-2 border-white shadow-lg transition-all duration-500 group-hover:scale-110" alt="preview" loading="lazy" />
                                        <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-[32px] flex items-center justify-center">
                                          <button type="button" onClick={() => removeImageFromProduct(idx)} className="bg-red-50 text-white p-3 rounded-full shadow-2xl hover:scale-110 transition-transform"><IconTrash /></button>
                                        </div>
@@ -1321,7 +1323,7 @@ const App: React.FC = () => {
                                        {newProduct.variants.map((variant, i) => (
                                           <div key={i} className="bg-white p-3 rounded-2xl border border-slate-200 flex items-center justify-between shadow-sm">
                                              <div className="flex items-center gap-3">
-                                                {variant.image ? <img src={variant.image} className="w-8 h-8 rounded-lg object-cover" /> : <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-xs">?</div>}
+                                                {variant.image ? <img src={variant.image} className="w-8 h-8 rounded-lg object-cover" loading="lazy" /> : <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-xs">?</div>}
                                                 <div className="text-xs">
                                                    <p className="font-bold text-slate-800">{variant.name}</p>
                                                    <p className="text-slate-500">{variant.priceDelta > 0 ? `+ R$ ${variant.priceDelta}` : 'Sem custo extra'}</p>
@@ -1380,7 +1382,7 @@ const App: React.FC = () => {
                                    {paginatedAdminProducts.map(p => (
                                       <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
                                          <td className="p-4 w-24">
-                                            <img src={p.image} className="w-16 h-16 rounded-2xl object-cover border border-slate-100 shadow-sm" alt={p.name} />
+                                            <img src={p.image} className="w-16 h-16 rounded-2xl object-cover border border-slate-100 shadow-sm" alt={p.name} loading="lazy" />
                                          </td>
                                          <td className="p-6 font-bold text-slate-700">{p.name}</td>
                                          <td className="p-6 text-xs uppercase tracking-widest text-slate-500">{p.category}</td>
@@ -1503,7 +1505,7 @@ const App: React.FC = () => {
                               <span className="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center font-black text-lg">+</span>
                               Adicionar Nova Opção
                             </h4>
-                            <form onSubmit={handleSaveCustomOption} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <form onSubmit={handleSaveCustomOption} className="grid grid-cols-1 md:grid-cols-5 gap-4">
                               <div className="md:col-span-1">
                                 <select 
                                   className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none text-xs font-bold uppercase tracking-widest focus:border-amber-500 transition-all cursor-pointer"
@@ -1518,12 +1520,52 @@ const App: React.FC = () => {
                               </div>
                               <input type="text" placeholder="Nome da Opção" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none text-sm" value={tempCustomOption.name} onChange={e => setTempCustomOption({ ...tempCustomOption, name: e.target.value })} />
                                <input type="number" placeholder="Valor Adicional (R$)" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none text-sm" value={tempCustomOption.price} onChange={e => setTempCustomOption({ ...tempCustomOption, price: Number(e.target.value) })} />
+                              <input type="text" placeholder="URL da Imagem (Opcional)" className="p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none text-sm" value={tempCustomOption.image || ''} onChange={e => setTempCustomOption({ ...tempCustomOption, image: e.target.value })} />
                               <button className="bg-slate-900 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-amber-600 transition-all shadow-lg active:scale-95">Salvar</button>
                             </form>
                              <div className="mt-8 pt-8 border-t border-slate-50 grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div><h5 className="text-[10px] font-black uppercase text-slate-400 mb-3">Materiais</h5><ul className="space-y-2">{materials.map(m => (<li key={m.id} className="flex justify-between items-center text-sm group"><span>{m.name}</span><button onClick={() => deleteCustomOption('material', m.id)} className="text-red-300 hover:text-red-500"><IconTrash/></button></li>))}</ul></div>
-                                <div><h5 className="text-[10px] font-black uppercase text-slate-400 mb-3">Cores</h5><ul className="space-y-2">{colors.map(c => (<li key={c.id} className="flex justify-between items-center text-sm group"><span>{c.name}</span><button onClick={() => deleteCustomOption('color', c.id)} className="text-red-300 hover:text-red-500"><IconTrash/></button></li>))}</ul></div>
-                                <div><h5 className="text-[10px] font-black uppercase text-slate-400 mb-3">Crucifixos</h5><ul className="space-y-2">{crucifixes.map(x => (<li key={x.id} className="flex justify-between items-center text-sm group"><span>{x.name}</span><button onClick={() => deleteCustomOption('crucifix', x.id)} className="text-red-300 hover:text-red-500"><IconTrash/></button></li>))}</ul></div>
+                                <div>
+                                   <h5 className="text-[10px] font-black uppercase text-slate-400 mb-3">Materiais</h5>
+                                   <ul className="space-y-2">
+                                     {materials.map(m => (
+                                       <li key={m.id} className="flex justify-between items-center text-sm group">
+                                         <div className="flex items-center gap-2">
+                                            {m.image && <img src={m.image} className="w-6 h-6 rounded-full object-cover border border-slate-100" loading="lazy" />}
+                                            <span>{m.name}</span>
+                                         </div>
+                                         <button onClick={() => deleteCustomOption('material', m.id)} className="text-red-300 hover:text-red-500"><IconTrash/></button>
+                                       </li>
+                                     ))}
+                                   </ul>
+                                </div>
+                                <div>
+                                   <h5 className="text-[10px] font-black uppercase text-slate-400 mb-3">Cores</h5>
+                                   <ul className="space-y-2">
+                                     {colors.map(c => (
+                                       <li key={c.id} className="flex justify-between items-center text-sm group">
+                                         <div className="flex items-center gap-2">
+                                            {c.image && <img src={c.image} className="w-6 h-6 rounded-full object-cover border border-slate-100" loading="lazy" />}
+                                            <span>{c.name}</span>
+                                         </div>
+                                         <button onClick={() => deleteCustomOption('color', c.id)} className="text-red-300 hover:text-red-500"><IconTrash/></button>
+                                       </li>
+                                     ))}
+                                   </ul>
+                                </div>
+                                <div>
+                                   <h5 className="text-[10px] font-black uppercase text-slate-400 mb-3">Crucifixos</h5>
+                                   <ul className="space-y-2">
+                                     {crucifixes.map(x => (
+                                       <li key={x.id} className="flex justify-between items-center text-sm group">
+                                         <div className="flex items-center gap-2">
+                                            {x.image && <img src={x.image} className="w-6 h-6 rounded-full object-cover border border-slate-100" loading="lazy" />}
+                                            <span>{x.name}</span>
+                                         </div>
+                                         <button onClick={() => deleteCustomOption('crucifix', x.id)} className="text-red-300 hover:text-red-500"><IconTrash/></button>
+                                       </li>
+                                     ))}
+                                   </ul>
+                                </div>
                              </div>
                          </div>
                       </div>
@@ -1673,7 +1715,7 @@ const App: React.FC = () => {
                  ) : cart.map((item, idx) => (
                    <div key={`${item.id}-${idx}`} className="flex gap-6 group animate-in slide-in-from-bottom duration-500" style={{ animationDelay: `${idx * 100}ms` }}>
                       <div className="w-20 h-20 md:w-24 md:h-24 rounded-[32px] overflow-hidden shadow-lg border border-slate-50 shrink-0">
-                         <img src={item.image} className="w-full h-full object-cover transition-transform group-hover:scale-110" alt="item" />
+                         <img src={item.image} className="w-full h-full object-cover transition-transform group-hover:scale-110" alt="item" loading="lazy" />
                       </div>
                       <div className="flex-grow min-w-0 flex flex-col justify-center space-y-1">
                          <h4 className="font-bold text-base text-slate-800 truncate group-hover:text-amber-700 transition-colors">{item.name}</h4>
