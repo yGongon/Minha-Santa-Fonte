@@ -38,8 +38,11 @@ const App: React.FC = () => {
   // --- Estados de Formulário Admin ---
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
+    name: '',
     category: CATEGORIES[1],
+    price: 0,
     stock: 10,
+    description: '',
     images: [],
     variants: [],
     isFeatured: false
@@ -165,21 +168,76 @@ const App: React.FC = () => {
       alert("Por favor, adicione pelo menos uma imagem.");
       return;
     }
+
+    const productData = {
+      ...newProduct,
+      price: Number(newProduct.price),
+      stock: Number(newProduct.stock),
+      image: newProduct.images[0] // Define a primeira imagem como principal
+    };
+
     if (editingProduct) {
-      const updatedList = products.map(p => p.id === editingProduct.id ? { ...p, ...newProduct } : p);
+      const updatedList = products.map(p => p.id === editingProduct.id ? { ...p, ...productData } : p);
       saveProductsToDB(updatedList as Product[]);
       setEditingProduct(null);
     } else {
-      const productToAdd: Product = { id: "prod-" + Date.now(), name: newProduct.name || "Sem Nome", category: newProduct.category || CATEGORIES[1], price: Number(newProduct.price) || 0, stock: Number(newProduct.stock) || 0, description: newProduct.description || "", image: newProduct.images[0], images: newProduct.images, variants: newProduct.variants || [], isFeatured: newProduct.isFeatured || false, createdAt: Date.now() };
+      const productToAdd: Product = { 
+        ...productData as Product,
+        id: "prod-" + Date.now(), 
+        createdAt: Date.now() 
+      };
       saveProductsToDB([productToAdd, ...products]);
     }
-    setNewProduct({ category: CATEGORIES[1], stock: 10, images: [], variants: [], isFeatured: false });
+
+    // Reset Form
+    setNewProduct({ 
+      name: '',
+      category: CATEGORIES[1], 
+      price: 0,
+      stock: 10, 
+      description: '',
+      images: [], 
+      variants: [], 
+      isFeatured: false 
+    });
   };
 
   const startEditingProduct = (product: Product) => {
     setEditingProduct(product);
     setNewProduct({ ...product });
     setAdminTab('products');
+  };
+
+  const addImageUrlToProduct = () => { 
+    if (tempImageUrl.trim()) { 
+      setNewProduct(p => ({ ...p, images: [...(p.images || []), tempImageUrl.trim()] })); 
+      setTempImageUrl(""); 
+    } 
+  };
+
+  const removeImageFromProduct = (index: number) => {
+    setNewProduct(p => ({
+      ...p,
+      images: p.images?.filter((_, i) => i !== index)
+    }));
+  };
+
+  const addVariantToProduct = () => { 
+    if (tempVariantName.trim()) { 
+      setNewProduct(p => ({ 
+        ...p, 
+        variants: [...(p.variants || []), { name: tempVariantName.trim(), priceDelta: tempVariantPrice }] 
+      })); 
+      setTempVariantName(""); 
+      setTempVariantPrice(0); 
+    } 
+  };
+
+  const removeVariantFromProduct = (index: number) => {
+    setNewProduct(p => ({
+      ...p,
+      variants: p.variants?.filter((_, i) => i !== index)
+    }));
   };
 
   const handleSaveCustomOption = (e: React.FormEvent) => {
@@ -200,9 +258,6 @@ const App: React.FC = () => {
     }
   };
 
-  const addImageUrlToProduct = () => { if (tempImageUrl.trim()) { setNewProduct(p => ({ ...p, images: [...(p.images || []), tempImageUrl.trim()] })); setTempImageUrl(""); } };
-  const addVariantToProduct = () => { if (tempVariantName.trim()) { setNewProduct(p => ({ ...p, variants: [...(p.variants || []), { name: tempVariantName.trim(), priceDelta: tempVariantPrice }] })); setTempVariantName(""); setTempVariantPrice(0); } };
-
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
   const filteredProducts = useMemo(() => {
@@ -218,6 +273,7 @@ const App: React.FC = () => {
   const IconCart = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>;
   const IconMenu = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>;
   const IconX = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>;
+  const IconPlus = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>;
   const IconWhatsApp = () => <svg className="w-8 h-8 md:w-10 md:h-10 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.72.94 3.675 1.438 5.662 1.439h.005c6.552 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" /></svg>;
 
   return (
@@ -272,7 +328,7 @@ const App: React.FC = () => {
         {currentPage === Page.Home && (
           <>
             <section className="relative h-[60vh] md:h-[70vh] flex items-center justify-center overflow-hidden">
-              <img src="https://images.unsplash.com/photo-1548623917-2fbc78919640?auto=format&fit=crop&q=80&w=2000" className="absolute inset-0 w-full h-full object-cover" alt="Hero" />
+              <img src="https://img.freepik.com/fotos-premium/jesus-cristo-crucificado-na-cruz-no-monte-golgota-morreu-pelos-pecados-da-humanidade-filho-de-deus-biblia-fe-natal-religiao-catolica-cristao-feliz-pascoa-rezando-boa-sexta-feira-generative-ai_930683-474.jpg?w=2000" className="absolute inset-0 w-full h-full object-cover" alt="Hero" />
               <div className="absolute inset-0 bg-slate-900/50"></div>
               <div className="relative text-center text-white px-6 max-w-2xl">
                 <h2 className="text-3xl md:text-6xl font-serif mb-4 md:mb-6 leading-tight">Espiritualidade e Paz para o seu Lar</h2>
@@ -491,39 +547,156 @@ const App: React.FC = () => {
               <section className="flex-grow p-4 md:p-12 overflow-y-auto">
                  <div className="bg-white p-6 md:p-12 rounded-[24px] md:rounded-[40px] shadow-sm border border-slate-100 max-w-5xl mx-auto">
                     {adminTab === 'products' && (
-                      <div className="space-y-6">
-                        <h3 className="text-xl md:text-2xl font-serif">{editingProduct ? 'Editar' : 'Novo'} Produto</h3>
-                        <form onSubmit={handleSaveProduct} className="space-y-6">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
-                            <input type="text" placeholder="Nome" value={newProduct.name || ''} className="p-4 bg-slate-50 border rounded-2xl outline-none" onChange={e => setNewProduct(p => ({ ...p, name: e.target.value }))} required />
-                            <select value={newProduct.category} className="p-4 bg-slate-50 border rounded-2xl outline-none" onChange={e => setNewProduct(p => ({ ...p, category: e.target.value }))}>{CATEGORIES.slice(1).map(c => <option key={c} value={c}>{c}</option>)}</select>
+                      <div className="space-y-8">
+                        <div className="flex justify-between items-center">
+                          <h3 className="text-xl md:text-2xl font-serif">{editingProduct ? 'Editar' : 'Cadastrar'} Produto</h3>
+                          {editingProduct && (
+                            <button onClick={() => {
+                              setEditingProduct(null);
+                              setNewProduct({ name: '', category: CATEGORIES[1], price: 0, stock: 10, description: '', images: [], variants: [], isFeatured: false });
+                            }} className="text-[10px] font-black uppercase text-red-500">Cancelar Edição</button>
+                          )}
+                        </div>
+
+                        <form onSubmit={handleSaveProduct} className="space-y-8">
+                          {/* Informações Básicas */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black uppercase text-slate-400">Nome do Artigo</label>
+                              <input type="text" placeholder="Ex: Terço de Cristal" value={newProduct.name || ''} className="w-full p-4 bg-slate-50 border rounded-2xl outline-none" onChange={e => setNewProduct(p => ({ ...p, name: e.target.value }))} required />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black uppercase text-slate-400">Categoria</label>
+                              <select value={newProduct.category} className="w-full p-4 bg-slate-50 border rounded-2xl outline-none" onChange={e => setNewProduct(p => ({ ...p, category: e.target.value }))}>{CATEGORIES.slice(1).map(c => <option key={c} value={c}>{c}</option>)}</select>
+                            </div>
                           </div>
-                          <button type="submit" className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase shadow-xl">Salvar Artigo</button>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black uppercase text-slate-400">Preço Base (R$)</label>
+                              <input type="number" step="0.01" value={newProduct.price || 0} className="w-full p-4 bg-slate-50 border rounded-2xl outline-none" onChange={e => setNewProduct(p => ({ ...p, price: Number(e.target.value) }))} required />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black uppercase text-slate-400">Estoque Inicial</label>
+                              <input type="number" value={newProduct.stock || 0} className="w-full p-4 bg-slate-50 border rounded-2xl outline-none" onChange={e => setNewProduct(p => ({ ...p, stock: Number(e.target.value) }))} required />
+                            </div>
+                            <div className="flex items-center space-x-3 pt-6">
+                              <input type="checkbox" id="featured" checked={newProduct.isFeatured} onChange={e => setNewProduct(p => ({ ...p, isFeatured: e.target.checked }))} className="w-6 h-6 accent-amber-600 rounded" />
+                              <label htmlFor="featured" className="text-[10px] font-black uppercase text-slate-600 cursor-pointer">Destacar na Home</label>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-slate-400">Descrição Detalhada</label>
+                            <textarea rows={4} placeholder="Conte a história do produto..." value={newProduct.description || ''} className="w-full p-4 bg-slate-50 border rounded-2xl outline-none" onChange={e => setNewProduct(p => ({ ...p, description: e.target.value }))} required />
+                          </div>
+
+                          {/* Gestão de Imagens */}
+                          <div className="space-y-4 p-6 bg-slate-50 rounded-[32px] border border-slate-100">
+                             <label className="text-[10px] font-black uppercase text-slate-400">Galeria de Imagens</label>
+                             <div className="flex gap-2">
+                                <input type="text" placeholder="URL da Imagem" value={tempImageUrl} className="flex-grow p-4 bg-white border rounded-2xl outline-none" onChange={e => setTempImageUrl(e.target.value)} />
+                                <button type="button" onClick={addImageUrlToProduct} className="p-4 bg-amber-600 text-white rounded-2xl"><IconPlus /></button>
+                             </div>
+                             <div className="flex flex-wrap gap-4">
+                                {newProduct.images?.map((img, idx) => (
+                                   <div key={idx} className="relative w-20 h-20 group">
+                                      <img src={img} className="w-full h-full object-cover rounded-xl border" alt="preview" />
+                                      <button type="button" onClick={() => removeImageFromProduct(idx)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"><IconX /></button>
+                                   </div>
+                                ))}
+                             </div>
+                          </div>
+
+                          {/* Gestão de Variantes */}
+                          <div className="space-y-4 p-6 bg-slate-50 rounded-[32px] border border-slate-100">
+                             <label className="text-[10px] font-black uppercase text-slate-400">Variantes (Opcional)</label>
+                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <input type="text" placeholder="Ex: Azul Celeste" value={tempVariantName} className="sm:col-span-1 p-4 bg-white border rounded-2xl outline-none" onChange={e => setTempVariantName(e.target.value)} />
+                                <input type="number" step="0.01" placeholder="Delta Preço (R$)" value={tempVariantPrice} className="sm:col-span-1 p-4 bg-white border rounded-2xl outline-none" onChange={e => setTempVariantPrice(Number(e.target.value))} />
+                                <button type="button" onClick={addVariantToProduct} className="sm:col-span-1 p-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px]">Add Variante</button>
+                             </div>
+                             <div className="space-y-2">
+                                {newProduct.variants?.map((v, idx) => (
+                                   <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-xl border text-sm">
+                                      <span>{v.name} ({v.priceDelta >= 0 ? '+' : ''} R$ {v.priceDelta.toFixed(2)})</span>
+                                      <button type="button" onClick={() => removeVariantFromProduct(idx)} className="text-red-500 font-bold">Remover</button>
+                                   </div>
+                                ))}
+                             </div>
+                          </div>
+
+                          <button type="submit" className="w-full py-6 bg-amber-600 text-white rounded-3xl font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-amber-700 transition-all">
+                             {editingProduct ? 'Salvar Alterações do Artigo' : 'Concluir Cadastro do Artigo'}
+                          </button>
                         </form>
                       </div>
                     )}
+
                     {adminTab === 'stock' && (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs md:text-sm">
-                          <thead className="bg-slate-50 border-b text-[9px] font-black uppercase text-slate-400">
-                            <tr><th className="p-4">Item</th><th className="p-4 text-center">Qtd</th><th className="p-4 text-right">Ações</th></tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {products.map(p => (
-                              <tr key={p.id} className="hover:bg-slate-50">
-                                <td className="p-4"><p className="font-bold truncate max-w-[120px]">{p.name}</p></td>
-                                <td className="p-4 text-center font-black">{p.stock}</td>
-                                <td className="p-4 text-right space-x-1">
-                                  <button onClick={() => updateStock(p.id, 1)} className="bg-slate-100 p-2 rounded-lg">+</button>
-                                  <button onClick={() => startEditingProduct(p)} className="bg-slate-900 text-white p-2 px-3 rounded-lg text-[8px] uppercase">Ed</button>
-                                </td>
+                      <div className="space-y-6">
+                        <h3 className="text-xl md:text-2xl font-serif">Gestão de Estoque</h3>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs md:text-sm">
+                            <thead className="bg-slate-50 border-b text-[9px] font-black uppercase text-slate-400">
+                              <tr>
+                                <th className="p-4">Produto</th>
+                                <th className="p-4">Categoria</th>
+                                <th className="p-4 text-center">Preço</th>
+                                <th className="p-4 text-center">Estoque</th>
+                                <th className="p-4 text-right">Ações</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody className="divide-y">
+                              {products.map(p => (
+                                <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                                  <td className="p-4 flex items-center space-x-3">
+                                    <img src={p.image} className="w-10 h-10 rounded-lg object-cover" alt="p" />
+                                    <p className="font-bold truncate max-w-[150px]">{p.name}</p>
+                                  </td>
+                                  <td className="p-4 text-slate-400">{p.category}</td>
+                                  <td className="p-4 text-center font-bold">R$ {p.price.toFixed(2)}</td>
+                                  <td className="p-4 text-center">
+                                    <span className={`px-3 py-1 rounded-full font-black ${p.stock <= 2 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>{p.stock}</span>
+                                  </td>
+                                  <td className="p-4 text-right space-x-2">
+                                    <button onClick={() => updateStock(p.id, 1)} className="bg-slate-100 p-2 rounded-lg hover:bg-slate-200" title="Aumentar Estoque">+</button>
+                                    <button onClick={() => updateStock(p.id, -1)} className="bg-slate-100 p-2 rounded-lg hover:bg-slate-200" title="Diminuir Estoque">-</button>
+                                    <button onClick={() => startEditingProduct(p)} className="bg-amber-600 text-white p-2 px-3 rounded-lg text-[9px] font-black uppercase hover:bg-amber-700">Ed</button>
+                                    <button onClick={() => deleteProduct(p.id)} className="bg-red-50 text-red-500 p-2 px-3 rounded-lg text-[9px] font-black uppercase hover:bg-red-500 hover:text-white">X</button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
-                    {adminTab === 'customizer' && <p className="text-center italic text-slate-400 py-10">Use um computador para configurar o terço.</p>}
+                    {adminTab === 'customizer' && (
+                       <div className="space-y-6">
+                          <h3 className="text-xl md:text-2xl font-serif">Configuração do Customizador</h3>
+                          <p className="text-slate-400 italic text-sm">Gerencie os materiais, cores e crucifixos disponíveis para o "Monte seu Terço".</p>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                             {/* Placeholder para os controles de materiais/cores que seguem o mesmo padrão de formulário */}
+                             <div className="p-6 bg-slate-50 rounded-2xl border text-center">
+                                <p className="font-bold mb-2">Materiais</p>
+                                <p className="text-[10px] text-slate-400 mb-4">{materials.length} opções ativas</p>
+                                <button className="text-[10px] font-black uppercase text-amber-600">Configurar</button>
+                             </div>
+                             <div className="p-6 bg-slate-50 rounded-2xl border text-center">
+                                <p className="font-bold mb-2">Cores</p>
+                                <p className="text-[10px] text-slate-400 mb-4">{colors.length} opções ativas</p>
+                                <button className="text-[10px] font-black uppercase text-amber-600">Configurar</button>
+                             </div>
+                             <div className="p-6 bg-slate-50 rounded-2xl border text-center">
+                                <p className="font-bold mb-2">Crucifixos</p>
+                                <p className="text-[10px] text-slate-400 mb-4">{crucifixes.length} opções ativas</p>
+                                <button className="text-[10px] font-black uppercase text-amber-600">Configurar</button>
+                             </div>
+                          </div>
+                       </div>
+                    )}
+                    {adminTab === 'blog' && <p className="text-center py-20 text-slate-400 italic">Módulo de Blog em desenvolvimento.</p>}
                  </div>
               </section>
            </div>
