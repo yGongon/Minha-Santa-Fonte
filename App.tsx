@@ -12,13 +12,21 @@ import {
 const ITEMS_PER_PAGE = 8;
 const WHATSAPP_NUMBER = "5575992257902"; // Número atualizado solicitado pelo usuário
 
+// Interface para o Balanço Financeiro
+interface SaleEntry {
+  id: string;
+  date: string;
+  description: string;
+  value: number;
+}
+
 const App: React.FC = () => {
   // --- Estados de Navegação e Autenticação ---
   const [currentPage, setCurrentPage] = useState<Page>(Page.Home);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [loginError, setLoginError] = useState("");
-  const [adminTab, setAdminTab] = useState<'products' | 'stock' | 'customizer' | 'blog'>('products');
+  const [adminTab, setAdminTab] = useState<'products' | 'stock' | 'customizer' | 'balance'>('products');
 
   // --- Estados de Dados ---
   const [products, setProducts] = useState<Product[]>([]);
@@ -27,6 +35,10 @@ const App: React.FC = () => {
   const [crucifixes, setCrucifixes] = useState<RosaryOption[]>([]);
   const [baseRosaryPrice, setBaseRosaryPrice] = useState<number>(40.00);
   
+  // Estado para o Balanço Financeiro
+  const [salesHistory, setSalesHistory] = useState<SaleEntry[]>([]);
+  const [newSale, setNewSale] = useState({ description: '', value: '' });
+
   // --- Estados do Catálogo (Filtros e Busca) ---
   const [selectedCategory, setSelectedCategory] = useState<string>("Todos");
   const [searchTerm, setSearchTerm] = useState("");
@@ -65,6 +77,53 @@ const App: React.FC = () => {
   const [tempVariantImage, setTempVariantImage] = useState("");
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
+  // --- LÓGICA DE SEO DINÂMICO ---
+  const updateSEO = (title: string, description: string) => {
+    document.title = `${title} | Minha Santa Fonte`;
+    // Atualiza Meta Description
+    let metaDesc = document.querySelector('meta[name="description"]');
+    if (!metaDesc) {
+      metaDesc = document.createElement('meta');
+      metaDesc.setAttribute('name', 'description');
+      document.head.appendChild(metaDesc);
+    }
+    metaDesc.setAttribute('content', description);
+    
+    // Atualiza Open Graph
+    let ogTitle = document.querySelector('meta[property="og:title"]');
+    if(ogTitle) ogTitle.setAttribute('content', `${title} | Minha Santa Fonte`);
+    
+    let ogDesc = document.querySelector('meta[property="og:description"]');
+    if(ogDesc) ogDesc.setAttribute('content', description);
+  };
+
+  useEffect(() => {
+    switch (currentPage) {
+      case Page.Home:
+        updateSEO("Artigos Religiosos e Fé", "Loja de artigos religiosos católicos: terços personalizados, bíblias, imagens sacras e decoração. Encontre paz e tradição para seu lar.");
+        break;
+      case Page.Catalog:
+        updateSEO("Catálogo de Produtos", "Explore nossa coleção completa de artigos sacros. Imagens, terços, velas e presentes católicos selecionados com devoção.");
+        break;
+      case Page.Customizer:
+        updateSEO("Monte seu Terço Personalizado", "Crie um terço único e exclusivo no Ateliê Minha Santa Fonte. Escolha as contas, cores e o crucifixo para sua devoção.");
+        break;
+      case Page.About:
+        updateSEO("Nossa História de Fé", "Conheça a história da Minha Santa Fonte. Nossa missão é levar o sagrado para os lares através de artigos religiosos de qualidade.");
+        break;
+      case Page.Product:
+        if (selectedProduct) {
+          updateSEO(selectedProduct.name, `Compre ${selectedProduct.name}. ${selectedProduct.description.substring(0, 150)}... Artigos religiosos de alta qualidade.`);
+        }
+        break;
+      case Page.AdminDashboard:
+        document.title = "Admin | Minha Santa Fonte";
+        break;
+      default:
+        updateSEO("Minha Santa Fonte", "Artigos Religiosos");
+    }
+  }, [currentPage, selectedProduct]);
+
   // --- Inicialização ---
   useEffect(() => {
     const savedProducts = localStorage.getItem('msf_db_products');
@@ -87,6 +146,12 @@ const App: React.FC = () => {
 
     const savedBasePrice = localStorage.getItem('msf_base_rosary_price');
     if (savedBasePrice) setBaseRosaryPrice(Number(savedBasePrice));
+
+    // Carregar histórico de vendas
+    const savedSales = localStorage.getItem('msf_sales_history');
+    if (savedSales) {
+      setSalesHistory(JSON.parse(savedSales));
+    }
   }, []);
 
   const saveProductsToDB = (updatedList: Product[]) => {
@@ -105,6 +170,32 @@ const App: React.FC = () => {
   const saveBasePrice = (val: number) => {
     setBaseRosaryPrice(val);
     localStorage.setItem('msf_base_rosary_price', val.toString());
+  };
+
+  // Funções do Balanço Financeiro
+  const handleAddSale = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSale.description || !newSale.value) return;
+    
+    const entry: SaleEntry = {
+      id: `sale-${Date.now()}`,
+      date: new Date().toLocaleDateString('pt-BR'),
+      description: newSale.description,
+      value: Number(newSale.value)
+    };
+    
+    const updatedHistory = [entry, ...salesHistory];
+    setSalesHistory(updatedHistory);
+    localStorage.setItem('msf_sales_history', JSON.stringify(updatedHistory));
+    setNewSale({ description: '', value: '' });
+  };
+
+  const deleteSale = (id: string) => {
+    if (window.confirm("Deseja remover este registro do histórico?")) {
+      const updatedHistory = salesHistory.filter(s => s.id !== id);
+      setSalesHistory(updatedHistory);
+      localStorage.setItem('msf_sales_history', JSON.stringify(updatedHistory));
+    }
   };
 
   const addToCart = (product: Product) => {
@@ -161,13 +252,6 @@ const App: React.FC = () => {
     saveProductsToDB(updated);
   };
 
-  const deleteProduct = (id: string) => {
-    if (window.confirm("Tem certeza que deseja remover este produto?")) {
-      const updated = products.filter(p => p.id !== id);
-      saveProductsToDB(updated);
-    }
-  };
-
   const handleAdminLogin = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -210,12 +294,6 @@ const App: React.FC = () => {
     setNewProduct({ name: '', category: CATEGORIES[1], price: 0, stock: 10, description: '', images: [], variants: [], isFeatured: false });
   };
 
-  const startEditingProduct = (product: Product) => {
-    setEditingProduct(product);
-    setNewProduct({ ...product });
-    setAdminTab('products');
-  };
-
   const addImageUrlToProduct = () => { 
     if (tempImageUrl.trim()) { 
       setNewProduct(p => ({ ...p, images: [...(p.images || []), tempImageUrl.trim()] })); 
@@ -227,25 +305,6 @@ const App: React.FC = () => {
     setNewProduct(p => ({
       ...p,
       images: p.images?.filter((_, i) => i !== index)
-    }));
-  };
-
-  const addVariantToProduct = () => { 
-    if (tempVariantName.trim()) { 
-      setNewProduct(p => ({ 
-        ...p, 
-        variants: [...(p.variants || []), { name: tempVariantName.trim(), priceDelta: tempVariantPrice, image: tempVariantImage.trim() || undefined }] 
-      })); 
-      setTempVariantName(""); 
-      setTempVariantPrice(0); 
-      setTempVariantImage("");
-    } 
-  };
-
-  const removeVariantFromProduct = (index: number) => {
-    setNewProduct(p => ({
-      ...p,
-      variants: p.variants?.filter((_, i) => i !== index)
     }));
   };
 
@@ -270,18 +329,6 @@ const App: React.FC = () => {
     saveCustomOptions(type, updatedList);
     setEditingCustomOption({ type: '', option: null });
     setTempCustomOption({ name: '', price: 0, image: '' });
-  };
-
-  const deleteCustomOption = (type: 'material' | 'color' | 'crucifix', id: string) => {
-    if (window.confirm("Remover esta opção do customizador?")) {
-      const currentList = type === 'material' ? materials : type === 'color' ? colors : crucifixes;
-      saveCustomOptions(type, currentList.filter(o => o.id !== id));
-    }
-  };
-
-  const startEditingCustomOption = (type: 'material' | 'color' | 'crucifix', option: RosaryOption) => {
-    setEditingCustomOption({ type, option });
-    setTempCustomOption({ ...option });
   };
 
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
@@ -385,7 +432,6 @@ const App: React.FC = () => {
   const IconMenu = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16m-7 6h7" /></svg>;
   const IconX = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>;
   const IconPlus = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>;
-  const IconEdit = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>;
   const IconTrash = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
   const IconSearch = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>;
   const IconWhatsApp = ({ size = "w-8 h-8" }: { size?: string }) => <svg className={`${size} text-white`} fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.72.94 3.675 1.438 5.662 1.439h.005c6.552 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" /></svg>;
@@ -940,6 +986,7 @@ const App: React.FC = () => {
                       { id: 'products', label: 'Artigos', icon: '🛍️' },
                       { id: 'stock', label: 'Inventário', icon: '📦' },
                       { id: 'customizer', label: 'Ateliê', icon: '🎨' },
+                      { id: 'balance', label: 'Balanço', icon: '💰' },
                       { id: 'blog', label: 'Blog', icon: '✍️' }
                     ].map((tab, idx) => (
                       <button 
@@ -964,7 +1011,7 @@ const App: React.FC = () => {
                  <div className="max-w-6xl mx-auto">
                     <div className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
                        <div className="space-y-2">
-                          <h3 className="text-3xl md:text-4xl font-serif text-slate-900 capitalize tracking-tight">{adminTab === 'products' ? (editingProduct ? 'Editando Peça' : 'Publicar Nova Peça') : adminTab === 'stock' ? 'Controle de Estoque' : adminTab === 'customizer' ? 'Configurações do Ateliê' : 'Mural do Ateliê'}</h3>
+                          <h3 className="text-3xl md:text-4xl font-serif text-slate-900 capitalize tracking-tight">{adminTab === 'products' ? (editingProduct ? 'Editando Peça' : 'Publicar Nova Peça') : adminTab === 'stock' ? 'Controle de Estoque' : adminTab === 'customizer' ? 'Configurações do Ateliê' : adminTab === 'balance' ? 'Balanço de Vendas' : 'Mural do Ateliê'}</h3>
                           <p className="text-slate-400 text-sm font-body-serif italic">Zele pela qualidade e apresentação dos seus artigos sacros.</p>
                        </div>
                        {adminTab === 'products' && editingProduct && (
@@ -1054,7 +1101,173 @@ const App: React.FC = () => {
                         </form>
                       </div>
                     )}
-                    {/* Resto das abas administrativas inalteradas */}
+
+                    {/* --- ABA DE INVENTÁRIO RESTAURADA --- */}
+                    {adminTab === 'stock' && (
+                      <div className="bg-white rounded-[48px] shadow-sm border border-slate-100 overflow-hidden animate-in fade-in">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left">
+                            <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                              <tr>
+                                <th className="p-6">Artigo</th>
+                                <th className="p-6 text-center">Estoque Atual</th>
+                                <th className="p-6 text-right">Ajuste Rápido</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                              {products.map(p => (
+                                <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
+                                  <td className="p-6 font-bold text-slate-700">{p.name}</td>
+                                  <td className="p-6 text-center">
+                                    <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${p.stock < 5 ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-600'}`}>
+                                      {p.stock} un
+                                    </span>
+                                  </td>
+                                  <td className="p-6 text-right">
+                                    <div className="flex justify-end gap-2">
+                                       <button onClick={() => updateStock(p.id, -1)} className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-red-50 hover:text-red-500 font-bold transition-all text-slate-500">-</button>
+                                       <button onClick={() => updateStock(p.id, 1)} className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-green-50 hover:text-green-500 font-bold transition-all text-slate-500">+</button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* --- ABA DO ATELIÊ RESTAURADA --- */}
+                    {adminTab === 'customizer' && (
+                      <div className="space-y-8 animate-in fade-in">
+                         {/* Configuração do Valor Base */}
+                         <div className="bg-slate-900 text-white p-8 md:p-10 rounded-[40px] shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+                            <div>
+                              <h4 className="text-amber-500 font-black text-xs uppercase tracking-[0.3em] mb-2">Mão de Obra Base</h4>
+                              <p className="opacity-60 text-sm">Valor inicial para qualquer terço personalizado.</p>
+                            </div>
+                            <div className="flex items-center gap-4 bg-white/10 p-4 rounded-2xl border border-white/10">
+                               <span className="text-2xl font-serif">R$</span>
+                               <input 
+                                 type="number" 
+                                 value={baseRosaryPrice} 
+                                 onChange={(e) => saveBasePrice(Number(e.target.value))}
+                                 className="bg-transparent text-3xl font-bold w-32 outline-none text-center"
+                               />
+                            </div>
+                         </div>
+
+                         {/* Formulário para Adicionar Opção */}
+                         <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100">
+                            <h4 className="font-bold text-slate-900 mb-6 flex items-center gap-3 uppercase text-xs tracking-widest">
+                              <span className="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center font-black text-lg">+</span>
+                              Adicionar Nova Opção
+                            </h4>
+                            <form onSubmit={handleSaveCustomOption} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                              <div className="md:col-span-1">
+                                <select 
+                                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none text-xs font-bold uppercase tracking-widest focus:border-amber-500 transition-all cursor-pointer"
+                                  value={editingCustomOption.type}
+                                  onChange={e => setEditingCustomOption({ ...editingCustomOption, type: e.target.value as any })}
+                                >
+                                   <option value="">Tipo do Item...</option>
+                                   <option value="material">Conta (Material)</option>
+                                   <option value="color">Cor</option>
+                                   <option value="crucifix">Crucifixo</option>
+                                </select>
+                              </div>
+                              <input 
+                                type="text" 
+                                placeholder="Nome da Opção" 
+                                className="p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none text-sm"
+                                value={tempCustomOption.name}
+                                onChange={e => setTempCustomOption({ ...tempCustomOption, name: e.target.value })}
+                              />
+                               <input 
+                                type="number" 
+                                placeholder="Valor Adicional (R$)" 
+                                className="p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none text-sm"
+                                value={tempCustomOption.price}
+                                onChange={e => setTempCustomOption({ ...tempCustomOption, price: Number(e.target.value) })}
+                              />
+                              <button className="bg-slate-900 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-amber-600 transition-all shadow-lg active:scale-95">
+                                Salvar
+                              </button>
+                            </form>
+                         </div>
+                      </div>
+                    )}
+
+                    {/* --- NOVA ABA DE BALANÇO FINANCEIRO --- */}
+                    {adminTab === 'balance' && (
+                      <div className="space-y-8 animate-in fade-in">
+                        {/* Cartões de Resumo */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                           <div className="bg-amber-500 text-white p-10 rounded-[40px] shadow-xl shadow-amber-500/20">
+                              <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-2 opacity-80">Total de Vendas</p>
+                              <h3 className="text-5xl font-serif">R$ {salesHistory.reduce((acc, item) => acc + item.value, 0).toFixed(2)}</h3>
+                           </div>
+                           <div className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-100">
+                              <h4 className="font-bold text-slate-900 mb-6 text-sm uppercase tracking-widest">Lançamento Manual</h4>
+                              <form onSubmit={handleAddSale} className="space-y-4">
+                                 <input 
+                                   type="text" 
+                                   placeholder="Descrição do Pedido (Ex: João - 2 Terços)" 
+                                   className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none text-sm"
+                                   value={newSale.description}
+                                   onChange={e => setNewSale({...newSale, description: e.target.value})}
+                                 />
+                                 <div className="flex gap-4">
+                                   <input 
+                                     type="number" 
+                                     placeholder="Valor (R$)" 
+                                     className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none text-sm"
+                                     value={newSale.value}
+                                     onChange={e => setNewSale({...newSale, value: e.target.value})}
+                                   />
+                                   <button className="px-8 bg-green-600 text-white rounded-2xl font-black text-xl hover:bg-green-700 transition-all active:scale-95">+</button>
+                                 </div>
+                              </form>
+                           </div>
+                        </div>
+
+                        {/* Tabela de Histórico */}
+                        <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
+                           <div className="p-8 border-b border-slate-50">
+                             <h4 className="font-bold text-slate-900 text-sm uppercase tracking-widest">Histórico de Transações</h4>
+                           </div>
+                           <div className="overflow-x-auto">
+                             <table className="w-full text-left">
+                                <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                                  <tr>
+                                     <th className="p-6">Data</th>
+                                     <th className="p-6">Descrição</th>
+                                     <th className="p-6 text-right">Valor</th>
+                                     <th className="p-6 text-right">Ação</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                   {salesHistory.map(sale => (
+                                     <tr key={sale.id} className="hover:bg-slate-50/50">
+                                        <td className="p-6 text-xs font-bold text-slate-500">{sale.date}</td>
+                                        <td className="p-6 font-medium text-slate-700">{sale.description}</td>
+                                        <td className="p-6 text-right font-black text-green-600">R$ {sale.value.toFixed(2)}</td>
+                                        <td className="p-6 text-right">
+                                          <button onClick={() => deleteSale(sale.id)} className="w-8 h-8 rounded-full bg-red-50 text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center">
+                                            <IconTrash />
+                                          </button>
+                                        </td>
+                                     </tr>
+                                   ))}
+                                   {salesHistory.length === 0 && (
+                                     <tr><td colSpan={4} className="p-12 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>
+                                   )}
+                                </tbody>
+                             </table>
+                           </div>
+                        </div>
+                      </div>
+                    )}
                  </div>
               </section>
            </div>
