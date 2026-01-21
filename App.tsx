@@ -176,7 +176,6 @@ const App: React.FC = () => {
     setNewProduct({ category: CATEGORIES[1], stock: 10, images: [], variants: [], isFeatured: false });
   };
 
-  // Fix: Added startEditingProduct function to populate the form and switch to the product tab
   const startEditingProduct = (product: Product) => {
     setEditingProduct(product);
     setNewProduct({ ...product });
@@ -332,7 +331,7 @@ const App: React.FC = () => {
                  <p className="text-slate-400 text-sm font-body-serif italic">Personalize cada detalhe do seu instrumento de oração.</p>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12">
-                 {/* Preview Mobile (Sempre Visível no Topo em Mobile) */}
+                 {/* Preview Mobile */}
                  <div className="lg:hidden">
                     <div className="bg-white rounded-[32px] shadow-sm border p-4 flex items-center justify-between">
                        <div className="flex items-center gap-3">
@@ -471,7 +470,6 @@ const App: React.FC = () => {
 
         {currentPage === Page.AdminDashboard && isAdmin && (
            <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row">
-              {/* Sidebar Admin Responsiva */}
               <aside className="w-full lg:w-72 bg-slate-900 text-white p-6 lg:p-10 flex flex-col space-y-6 lg:space-y-12 shrink-0">
                  <div className="flex items-center justify-between lg:justify-start lg:space-x-2">
                     <div className="flex items-center space-x-2 text-amber-500"><IconCross /><span className="font-bold tracking-tighter text-base md:text-lg text-white uppercase">Admin MSF</span></div>
@@ -491,7 +489,6 @@ const App: React.FC = () => {
               </aside>
 
               <section className="flex-grow p-4 md:p-12 overflow-y-auto">
-                 {/* Conteúdo Admin ajustado para mobile */}
                  <div className="bg-white p-6 md:p-12 rounded-[24px] md:rounded-[40px] shadow-sm border border-slate-100 max-w-5xl mx-auto">
                     {adminTab === 'products' && (
                       <div className="space-y-6">
@@ -559,9 +556,11 @@ const App: React.FC = () => {
           <div className="hidden md:block">
             <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Navegação</h3>
             <ul className="space-y-4 text-[11px] font-bold uppercase tracking-widest">
-              <li><button onClick={() => navigateToPage(Page.Home)} className="hover:text-white">Início</button></li>
-              <li><button onClick={() => navigateToPage(Page.Catalog)} className="hover:text-white">Catálogo</button></li>
-              <li><button onClick={() => navigateToPage(Page.About)} className="hover:text-white">Sobre Nós</button></li>
+              <li><button onClick={() => navigateToPage(Page.Home)} className="hover:text-white transition-colors">Início</button></li>
+              <li><button onClick={() => navigateToPage(Page.Catalog)} className="hover:text-white transition-colors">Catálogo</button></li>
+              <li><button onClick={() => navigateToPage(Page.Customizer)} className="hover:text-white transition-colors">Monte seu Terço</button></li>
+              <li><button onClick={() => navigateToPage(Page.About)} className="hover:text-white transition-colors">Sobre Nós</button></li>
+              <li><button onClick={() => navigateToPage(Page.AdminLogin)} className="text-amber-600 hover:text-amber-500 transition-colors">Administração</button></li>
             </ul>
           </div>
           <div>
