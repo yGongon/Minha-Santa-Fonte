@@ -10,9 +10,18 @@ import {
 } from './constants';
 import { supabase } from './supabaseClient';
 import { Session } from '@supabase/supabase-js';
+import emailjs from '@emailjs/browser';
 
 const ITEMS_PER_PAGE = 8;
 const WHATSAPP_NUMBER = "5575992257902"; 
+
+// --- CONFIGURAÇÃO DE E-MAIL (EmailJS) ---
+// Credenciais fornecidas para notificação de produção
+const EMAIL_CONFIG = {
+  SERVICE_ID: "Minha santa fonte", // ID do Serviço (Verifique se é o ID exato, ex: service_xxx)
+  TEMPLATE_ID: "template_jf47pls", // ID do Template
+  PUBLIC_KEY: "VA3a0JkCjqXQUIec1"  // Chave Pública
+};
 
 // Interface para Vendas/Produção
 interface SaleEntry {
@@ -85,15 +94,40 @@ const App: React.FC = () => {
   // --- LÓGICA DE SEO DINÂMICO ---
   const updateSEO = (title: string, description: string) => {
     document.title = `${title} | Minha Santa Fonte`;
-    // ... (restante do código SEO mantido igual)
+    let metaDesc = document.querySelector('meta[name="description"]');
+    if (!metaDesc) {
+      metaDesc = document.createElement('meta');
+      metaDesc.setAttribute('name', 'description');
+      document.head.appendChild(metaDesc);
+    }
+    metaDesc.setAttribute('content', description);
+    
+    let ogTitle = document.querySelector('meta[property="og:title"]');
+    if(ogTitle) ogTitle.setAttribute('content', `${title} | Minha Santa Fonte`);
+    
+    let ogDesc = document.querySelector('meta[property="og:description"]');
+    if(ogDesc) ogDesc.setAttribute('content', description);
   };
 
   useEffect(() => {
     switch (currentPage) {
       case Page.Home:
-        updateSEO("Artigos Religiosos e Fé", "Loja de artigos religiosos católicos...");
+        updateSEO("Artigos Religiosos e Fé", "Loja de artigos religiosos católicos: terços personalizados, bíblias, imagens sacras e decoração. Encontre paz e tradição para seu lar.");
         break;
-      // ... (outros cases mantidos)
+      case Page.Catalog:
+        updateSEO("Catálogo de Produtos", "Explore nossa coleção completa de artigos sacros. Imagens, terços, velas e presentes católicos selecionados com devoção.");
+        break;
+      case Page.Customizer:
+        updateSEO("Monte seu Terço Personalizado", "Crie um terço único e exclusivo no Ateliê Minha Santa Fonte. Escolha as contas, cores e o crucifixo para sua devoção.");
+        break;
+      case Page.About:
+        updateSEO("Nossa História de Fé", "Conheça a história da Minha Santa Fonte. Nossa missão é levar o sagrado para os lares através de artigos religiosos de qualidade.");
+        break;
+      case Page.Product:
+        if (selectedProduct) {
+          updateSEO(selectedProduct.name, `Compre ${selectedProduct.name}. ${selectedProduct.description.substring(0, 150)}... Artigos religiosos de alta qualidade.`);
+        }
+        break;
       case Page.AdminDashboard:
         document.title = "Admin | Minha Santa Fonte";
         break;
@@ -192,9 +226,8 @@ const App: React.FC = () => {
     setCurrentPage(Page.Home);
   };
 
-  // --- Funções Auxiliares de Banco de Dados (Mantidas) ---
+  // --- Funções Auxiliares de Banco de Dados ---
   const handleSaveProduct = async (e: React.FormEvent) => {
-    // ... (código mantido)
     e.preventDefault();
     if (!newProduct.images || newProduct.images.length === 0) {
       alert("Por favor, adicione pelo menos uma imagem.");
@@ -236,7 +269,6 @@ const App: React.FC = () => {
   };
 
   const deleteProduct = async (id: string) => {
-    // ... (mantido)
     if (window.confirm("Tem certeza que deseja remover este produto? Essa ação não pode ser desfeita.")) {
       const { error } = await supabase.from('products').delete().eq('id', id);
       if (!error) {
@@ -248,7 +280,6 @@ const App: React.FC = () => {
   };
 
   const updateStock = async (id: string, delta: number) => {
-    // ... (mantido)
     const product = products.find(p => p.id === id);
     if (!product) return;
     const newStock = Math.max(0, product.stock + delta);
@@ -256,9 +287,8 @@ const App: React.FC = () => {
     await supabase.from('products').update({ stock: newStock }).eq('id', id);
   };
 
-  // --- Funções de Variantes (Mantidas) ---
+  // --- Funções de Variantes ---
   const addVariantToProduct = () => {
-    // ... (mantido)
     if (!tempVariantName) return;
     const variant: ProductVariant = {
       name: tempVariantName,
@@ -275,16 +305,14 @@ const App: React.FC = () => {
   };
 
   const removeVariantFromProduct = (index: number) => {
-    // ... (mantido)
     setNewProduct(prev => ({
       ...prev,
       variants: prev.variants?.filter((_, i) => i !== index)
     }));
   };
 
-  // --- Funções do Ateliê (Mantidas) ---
+  // --- Funções do Ateliê ---
   const saveCustomOptions = async (type: 'material' | 'color' | 'crucifix', newOption: RosaryOption) => {
-    // ... (mantido)
     const payload = { ...newOption, type };
     const { error } = await supabase.from('custom_options').upsert(payload);
     if (error) { alert('Erro ao salvar opção: ' + error.message); return; }
@@ -303,7 +331,6 @@ const App: React.FC = () => {
   };
 
   const handleSaveCustomOption = async (e: React.FormEvent) => {
-    // ... (mantido)
     e.preventDefault();
     if (!editingCustomOption.type) return;
     const type = editingCustomOption.type as 'material' | 'color' | 'crucifix';
@@ -319,7 +346,6 @@ const App: React.FC = () => {
   };
   
   const deleteCustomOption = async (type: 'material' | 'color' | 'crucifix', id: string) => {
-    // ... (mantido)
     if (window.confirm("Remover esta opção?")) {
       await supabase.from('custom_options').delete().eq('id', id);
       if (type === 'material') setMaterials(materials.filter(m => m.id !== id));
@@ -333,10 +359,31 @@ const App: React.FC = () => {
     await supabase.from('config').upsert({ key: 'base_rosary_price', value: val.toString() });
   };
 
-  // --- Funções Financeiras/Produção (Mantidas) ---
+  // --- Função para Enviar Notificação por E-mail ---
+  const sendProductionNotification = async (sale: SaleEntry) => {
+    try {
+      await emailjs.send(
+        EMAIL_CONFIG.SERVICE_ID,
+        EMAIL_CONFIG.TEMPLATE_ID,
+        {
+          description: sale.description, // Variável {{description}} no template
+          value: sale.value.toFixed(2),  // Variável {{value}} no template
+          date: sale.date,               // Variável {{date}} no template
+          to_name: "Equipe Minha Santa Fonte"
+        },
+        EMAIL_CONFIG.PUBLIC_KEY
+      );
+      console.log("E-mail de notificação enviado com sucesso!");
+    } catch (error) {
+      console.error("Erro ao enviar e-mail de notificação:", error);
+      alert("O pedido foi salvo, mas houve um erro ao enviar a notificação por e-mail. Verifique as credenciais no console.");
+    }
+  };
+
+  // --- Funções Financeiras/Produção ---
   const handleAddSale = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSale.description) return; // Valor pode ser 0 ou vazio se for só produção
+    if (!newSale.description) return; 
     
     const entry: SaleEntry = {
       id: `sale-${Date.now()}`,
@@ -355,6 +402,9 @@ const App: React.FC = () => {
     
     setSalesHistory([entry, ...salesHistory]);
     setNewSale({ description: '', value: '' });
+
+    // Enviar notificação por e-mail com os detalhes do pedido
+    await sendProductionNotification(entry);
   };
 
   const updateSaleStatus = async (id: string, newStatus: 'pending' | 'in_progress' | 'done') => {
@@ -373,9 +423,8 @@ const App: React.FC = () => {
     }
   };
 
-  // --- Funções Carrinho (Mantidas) ---
+  // --- Funções Carrinho ---
   const addToCart = (product: Product) => {
-    // ... (mantido)
     if (product.stock <= 0) {
       alert("Desculpe, este produto está temporariamente esgotado.");
       return;
@@ -392,7 +441,6 @@ const App: React.FC = () => {
   };
 
   const calculateCustomPrice = () => {
-    // ... (mantido)
     let total = baseRosaryPrice;
     if (customSelections.material) total += customSelections.material.price;
     if (customSelections.color) total += customSelections.color.price;
@@ -401,7 +449,6 @@ const App: React.FC = () => {
   };
 
   const addCustomToCart = () => {
-    // ... (mantido)
     const finalPrice = calculateCustomPrice();
     const customItem: CartItem = {
       id: "custom-" + Date.now(),
@@ -427,7 +474,6 @@ const App: React.FC = () => {
   };
 
   const addImageUrlToProduct = () => { 
-    // ... (mantido)
     if (tempImageUrl.trim()) { 
       setNewProduct(p => ({ ...p, images: [...(p.images || []), tempImageUrl.trim()] })); 
       setTempImageUrl(""); 
@@ -435,7 +481,6 @@ const App: React.FC = () => {
   };
 
   const removeImageFromProduct = (index: number) => {
-    // ... (mantido)
     setNewProduct(p => ({
       ...p,
       images: p.images?.filter((_, i) => i !== index)
@@ -445,7 +490,7 @@ const App: React.FC = () => {
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
   
-  // --- Lógica Filtragem (Mantida) ---
+  // --- Lógica Filtragem ---
   const filteredProducts = useMemo(() => {
     let list = [...products];
     if (searchTerm.trim()) {
@@ -490,7 +535,6 @@ const App: React.FC = () => {
   };
 
   const copyProductLink = () => {
-    // ... (mantido)
     const url = window.location.href;
     navigator.clipboard.writeText(url).then(() => {
       setCopyFeedback(true);
@@ -499,7 +543,6 @@ const App: React.FC = () => {
   };
 
   const handleCheckoutWhatsApp = () => {
-    // ... (mantido)
     if (cart.length === 0) return;
     let message = "🙏 *Novo Pedido - Minha Santa Fonte* 🙏\n\n";
     message += "Olá! Gostaria de encomendar os seguintes artigos religiosos:\n\n";
@@ -525,7 +568,7 @@ const App: React.FC = () => {
     window.open(whatsappUrl, '_blank');
   };
 
-  // --- Ícones (Mantidos) ---
+  // --- Ícones ---
   const IconCross = () => <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M11 2h2v7h7v2h-7v11h-2v-11h-7v-2h7v-7z" /></svg>;
   const IconCart = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>;
   const IconMenu = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16m-7 6h7" /></svg>;
@@ -535,8 +578,8 @@ const App: React.FC = () => {
   const IconSearch = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>;
   const IconEdit = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>;
   const IconWhatsApp = ({ size = "w-8 h-8" }: { size?: string }) => <svg className={`${size} text-white`} fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.72.94 3.675 1.438 5.662 1.439h.005c6.552 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" /></svg>;
-  const IconFacebook = () => <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z" /></svg>;
-  const IconTwitter = () => <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>;
+  const IconFacebook = () => <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>;
+  const IconTwitter = () => <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>;
   const IconLink = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>;
 
   if (loadingAuth) {

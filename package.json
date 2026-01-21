@@ -1,4 +1,3 @@
-
 {
   "name": "minha-santa-fonte",
   "private": true,
@@ -12,7 +11,8 @@
   "dependencies": {
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "@supabase/supabase-js": "^2.39.0"
+    "@supabase/supabase-js": "^2.39.0",
+    "@emailjs/browser": "^3.11.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
