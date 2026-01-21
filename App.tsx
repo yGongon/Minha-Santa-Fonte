@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Product, CartItem, Page, CustomRosary, ProductVariant, RosaryOption } from './types';
 import { 
@@ -18,10 +17,17 @@ const WHATSAPP_NUMBER = "5575992257902";
 // --- CONFIGURAÇÃO DE E-MAIL (EmailJS) ---
 // Credenciais fornecidas para notificação de produção
 const EMAIL_CONFIG = {
-  SERVICE_ID: "Minha santa fonte", // ID do Serviço (Verifique se é o ID exato, ex: service_xxx)
-  TEMPLATE_ID: "template_jf47pls", // ID do Template
-  PUBLIC_KEY: "VA3a0JkCjqXQUIec1"  // Chave Pública
+  SERVICE_ID: "Minha santa fonte", 
+  TEMPLATE_ID: "template_jf47pls", 
+  PUBLIC_KEY: "VA3a0JkCjqXQUIec1"
 };
+
+// LISTA DE E-MAILS PARA NOTIFICAÇÃO
+// Adicione aqui os e-mails que devem receber o alerta, separados por vírgula
+const NOTIFICATION_EMAILS = [
+  "wevelleytwich@gmail.com",
+  "wevelleyjoga@gmail.com"
+];
 
 // Interface para Vendas/Produção
 interface SaleEntry {
@@ -362,6 +368,10 @@ const App: React.FC = () => {
   // --- Função para Enviar Notificação por E-mail ---
   const sendProductionNotification = async (sale: SaleEntry) => {
     try {
+      // Junta todos os e-mails da lista em uma string separada por vírgulas
+      // NOTA: É necessário configurar o template no EmailJS para usar a variável {{to_email}} no campo "To"
+      const recipients = NOTIFICATION_EMAILS.join(',');
+
       await emailjs.send(
         EMAIL_CONFIG.SERVICE_ID,
         EMAIL_CONFIG.TEMPLATE_ID,
@@ -369,11 +379,12 @@ const App: React.FC = () => {
           description: sale.description, // Variável {{description}} no template
           value: sale.value.toFixed(2),  // Variável {{value}} no template
           date: sale.date,               // Variável {{date}} no template
-          to_name: "Equipe Minha Santa Fonte"
+          to_name: "Equipe Minha Santa Fonte",
+          to_email: recipients           // Variável {{to_email}} para múltiplos destinatários
         },
         EMAIL_CONFIG.PUBLIC_KEY
       );
-      console.log("E-mail de notificação enviado com sucesso!");
+      console.log("E-mail de notificação enviado com sucesso para: " + recipients);
     } catch (error) {
       console.error("Erro ao enviar e-mail de notificação:", error);
       alert("O pedido foi salvo, mas houve um erro ao enviar a notificação por e-mail. Verifique as credenciais no console.");
@@ -415,10 +426,12 @@ const App: React.FC = () => {
   };
 
   const deleteSale = async (id: string) => {
-    if (window.confirm("Deseja remover este registro?")) {
+    if (window.confirm("Deseja realmente apagar este pedido da produção/histórico?")) {
       const { error } = await supabase.from('sales').delete().eq('id', id);
       if (!error) {
         setSalesHistory(salesHistory.filter(s => s.id !== id));
+      } else {
+        alert("Erro ao remover: " + error.message);
       }
     }
   };
@@ -1469,17 +1482,17 @@ const App: React.FC = () => {
                              {/* Coluna A FAZER */}
                              <div className="space-y-4">
                                 <div className="flex items-center gap-3 mb-4"><span className="w-3 h-3 rounded-full bg-slate-300"></span><h4 className="font-black uppercase tracking-[0.2em] text-slate-500 text-xs">A Fazer</h4><span className="text-xs bg-slate-200 px-2 py-0.5 rounded-full font-bold text-slate-600">{salesHistory.filter(s => !s.status || s.status === 'pending').length}</span></div>
-                                <div className="bg-slate-100 p-4 rounded-[32px] min-h-[50vh] space-y-4">{salesHistory.filter(s => !s.status || s.status === 'pending').map(order => (<div key={order.id} className="bg-white p-5 rounded-3xl shadow-sm border border-slate-200 group"><p className="font-bold text-slate-800 mb-1">{order.description}</p><div className="flex justify-between items-end"><span className="text-xs text-slate-400 font-bold">{order.date}</span><div className="flex gap-2"><button onClick={() => updateSaleStatus(order.id, 'in_progress')} className="bg-blue-100 text-blue-600 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-blue-600 hover:text-white transition-all">Iniciar →</button></div></div></div>))}</div>
+                                <div className="bg-slate-100 p-4 rounded-[32px] min-h-[50vh] space-y-4">{salesHistory.filter(s => !s.status || s.status === 'pending').map(order => (<div key={order.id} className="bg-white p-5 rounded-3xl shadow-sm border border-slate-200 group relative"><p className="font-bold text-slate-800 mb-1 pr-6">{order.description}</p><button onClick={() => deleteSale(order.id)} className="absolute top-5 right-5 text-red-300 hover:text-red-500 transition-colors"><IconTrash /></button><div className="flex justify-between items-end"><span className="text-xs text-slate-400 font-bold">{order.date}</span><div className="flex gap-2"><button onClick={() => updateSaleStatus(order.id, 'in_progress')} className="bg-blue-100 text-blue-600 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-blue-600 hover:text-white transition-all">Iniciar →</button></div></div></div>))}</div>
                              </div>
                              {/* Coluna EM CONFECÇÃO */}
                              <div className="space-y-4">
                                 <div className="flex items-center gap-3 mb-4"><span className="w-3 h-3 rounded-full bg-amber-500"></span><h4 className="font-black uppercase tracking-[0.2em] text-amber-600 text-xs">Em Confecção</h4><span className="text-xs bg-amber-100 px-2 py-0.5 rounded-full font-bold text-amber-700">{salesHistory.filter(s => s.status === 'in_progress').length}</span></div>
-                                <div className="bg-amber-50 p-4 rounded-[32px] min-h-[50vh] space-y-4 border border-amber-100">{salesHistory.filter(s => s.status === 'in_progress').map(order => (<div key={order.id} className="bg-white p-5 rounded-3xl shadow-sm border border-amber-100 group"><p className="font-bold text-slate-800 mb-1">{order.description}</p><div className="flex justify-between items-end"><span className="text-xs text-slate-400 font-bold">{order.date}</span><div className="flex gap-2"><button onClick={() => updateSaleStatus(order.id, 'pending')} className="bg-slate-100 text-slate-600 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-slate-200 transition-all">←</button><button onClick={() => updateSaleStatus(order.id, 'done')} className="bg-green-100 text-green-600 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-green-600 hover:text-white transition-all">Concluir →</button></div></div></div>))}</div>
+                                <div className="bg-amber-50 p-4 rounded-[32px] min-h-[50vh] space-y-4 border border-amber-100">{salesHistory.filter(s => s.status === 'in_progress').map(order => (<div key={order.id} className="bg-white p-5 rounded-3xl shadow-sm border border-amber-100 group relative"><p className="font-bold text-slate-800 mb-1 pr-6">{order.description}</p><button onClick={() => deleteSale(order.id)} className="absolute top-5 right-5 text-red-300 hover:text-red-500 transition-colors"><IconTrash /></button><div className="flex justify-between items-end"><span className="text-xs text-slate-400 font-bold">{order.date}</span><div className="flex gap-2"><button onClick={() => updateSaleStatus(order.id, 'pending')} className="bg-slate-100 text-slate-600 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-slate-200 transition-all">←</button><button onClick={() => updateSaleStatus(order.id, 'done')} className="bg-green-100 text-green-600 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-green-600 hover:text-white transition-all">Concluir →</button></div></div></div>))}</div>
                              </div>
                              {/* Coluna PRONTOS */}
                              <div className="space-y-4">
                                 <div className="flex items-center gap-3 mb-4"><span className="w-3 h-3 rounded-full bg-green-500"></span><h4 className="font-black uppercase tracking-[0.2em] text-green-600 text-xs">Prontos / Enviados</h4><span className="text-xs bg-green-100 px-2 py-0.5 rounded-full font-bold text-green-700">{salesHistory.filter(s => s.status === 'done').length}</span></div>
-                                <div className="bg-green-50 p-4 rounded-[32px] min-h-[50vh] space-y-4 border border-green-100">{salesHistory.filter(s => s.status === 'done').map(order => (<div key={order.id} className="bg-white p-5 rounded-3xl shadow-sm border border-green-100 opacity-60 hover:opacity-100 transition-opacity"><p className="font-bold text-slate-800 mb-1 line-through decoration-slate-300">{order.description}</p><div className="flex justify-between items-end"><span className="text-xs text-slate-400 font-bold">{order.date}</span><button onClick={() => updateSaleStatus(order.id, 'in_progress')} className="bg-slate-100 text-slate-400 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-slate-200 transition-all">Retornar</button></div></div>))}</div>
+                                <div className="bg-green-50 p-4 rounded-[32px] min-h-[50vh] space-y-4 border border-green-100">{salesHistory.filter(s => s.status === 'done').map(order => (<div key={order.id} className="bg-white p-5 rounded-3xl shadow-sm border border-green-100 opacity-60 hover:opacity-100 transition-opacity relative"><p className="font-bold text-slate-800 mb-1 line-through decoration-slate-300 pr-6">{order.description}</p><button onClick={() => deleteSale(order.id)} className="absolute top-5 right-5 text-red-300 hover:text-red-500 transition-colors"><IconTrash /></button><div className="flex justify-between items-end"><span className="text-xs text-slate-400 font-bold">{order.date}</span><button onClick={() => updateSaleStatus(order.id, 'in_progress')} className="bg-slate-100 text-slate-400 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-slate-200 transition-all">Retornar</button></div></div>))}</div>
                              </div>
                           </div>
                        </div>
