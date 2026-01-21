@@ -15,15 +15,16 @@ const ITEMS_PER_PAGE = 8;
 const WHATSAPP_NUMBER = "5575992257902"; 
 
 // --- CONFIGURAÇÃO DE E-MAIL (EmailJS) ---
-// Credenciais fornecidas para notificação de produção
 const EMAIL_CONFIG = {
+  // ATENÇÃO: O SERVICE_ID geralmente começa com "service_". 
+  // O nome "Minha santa fonte" pode ser apenas o nome de exibição.
+  // Verifique na aba "Email Services" do painel EmailJS se há um ID como "service_xxxxxxx".
   SERVICE_ID: "Minha santa fonte", 
   TEMPLATE_ID: "template_jf47pls", 
   PUBLIC_KEY: "VA3a0JkCjqXQUIec1"
 };
 
 // LISTA DE E-MAILS PARA NOTIFICAÇÃO
-// Adicione aqui os e-mails que devem receber o alerta, separados por vírgula
 const NOTIFICATION_EMAILS = [
   "wevelleytwich@gmail.com",
   "wevelleyjoga@gmail.com"
@@ -368,26 +369,31 @@ const App: React.FC = () => {
   // --- Função para Enviar Notificação por E-mail ---
   const sendProductionNotification = async (sale: SaleEntry) => {
     try {
-      // Junta todos os e-mails da lista em uma string separada por vírgulas
-      // NOTA: É necessário configurar o template no EmailJS para usar a variável {{to_email}} no campo "To"
       const recipients = NOTIFICATION_EMAILS.join(',');
 
-      await emailjs.send(
+      const result = await emailjs.send(
         EMAIL_CONFIG.SERVICE_ID,
         EMAIL_CONFIG.TEMPLATE_ID,
         {
-          description: sale.description, // Variável {{description}} no template
-          value: sale.value.toFixed(2),  // Variável {{value}} no template
-          date: sale.date,               // Variável {{date}} no template
+          description: sale.description,
+          value: sale.value.toFixed(2),
+          date: sale.date,
           to_name: "Equipe Minha Santa Fonte",
-          to_email: recipients           // Variável {{to_email}} para múltiplos destinatários
+          to_email: recipients 
         },
         EMAIL_CONFIG.PUBLIC_KEY
       );
-      console.log("E-mail de notificação enviado com sucesso para: " + recipients);
-    } catch (error) {
-      console.error("Erro ao enviar e-mail de notificação:", error);
-      alert("O pedido foi salvo, mas houve um erro ao enviar a notificação por e-mail. Verifique as credenciais no console.");
+      
+      console.log("E-mail enviado com sucesso:", result.text);
+      alert(`Pedido Salvo e E-mail Enviado! (ID: ${result.status})`);
+      
+    } catch (error: any) {
+      console.error("Erro detalhado do EmailJS:", error);
+      // Extrair mensagem de erro legível
+      const errorMessage = error?.text || error?.message || JSON.stringify(error);
+      
+      // Alerta DETALHADO para o usuário corrigir
+      alert(`O pedido foi salvo no sistema, mas houve um erro ao enviar o e-mail.\n\nERRO TÉCNICO: ${errorMessage}\n\nDICA: Verifique se o SERVICE_ID '${EMAIL_CONFIG.SERVICE_ID}' está correto. Geralmente ele é um código como 'service_123xyz' e não o nome.`);
     }
   };
 
