@@ -1,15 +1,12 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Product, Article, CartItem, Page, CustomRosary, ProductVariant } from './types';
+import { Product, Article, CartItem, Page, CustomRosary, ProductVariant, RosaryOption } from './types';
 import { 
   PRODUCTS as INITIAL_PRODUCTS, 
   CATEGORIES, 
-  ARTICLES as INITIAL_ARTICLES,
-  ROSARY_MATERIALS,
-  ROSARY_COLORS,
-  ROSARY_SIZES,
-  ROSARY_CRUCIFIXES,
-  ROSARY_MEDALS
+  ROSARY_MATERIALS as INITIAL_MATERIALS,
+  ROSARY_COLORS as INITIAL_COLORS,
+  ROSARY_CRUCIFIXES as INITIAL_CRUCIFIXES
 } from './constants';
 
 const BASE_ROSARY_PRICE = 40.00;
@@ -19,11 +16,14 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Home);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loginError, setLoginError] = useState("");
-  const [adminTab, setAdminTab] = useState<'products' | 'stock' | 'blog'>('products');
+  const [adminTab, setAdminTab] = useState<'products' | 'stock' | 'customizer' | 'blog'>('products');
 
   // --- Estados de Dados ---
   const [products, setProducts] = useState<Product[]>([]);
-  const [articles, setArticles] = useState<Article[]>([]);
+  const [materials, setMaterials] = useState<RosaryOption[]>([]);
+  const [colors, setColors] = useState<RosaryOption[]>([]);
+  const [crucifixes, setCrucifixes] = useState<RosaryOption[]>([]);
+  
   const [selectedCategory, setSelectedCategory] = useState<string>("Todos");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -35,12 +35,18 @@ const App: React.FC = () => {
   const [customSelections, setCustomSelections] = useState<CustomRosary>({});
 
   // --- Estados de Formulário Admin ---
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
     category: CATEGORIES[1],
     stock: 10,
     images: [],
-    variants: []
+    variants: [],
+    isFeatured: false
   });
+  
+  const [editingCustomOption, setEditingCustomOption] = useState<{type: string, option: RosaryOption | null}>({type: '', option: null});
+  const [tempCustomOption, setTempCustomOption] = useState<Partial<RosaryOption>>({ name: '', price: 0, image: '' });
+
   const [tempImageUrl, setTempImageUrl] = useState("");
   const [tempVariantName, setTempVariantName] = useState("");
   const [tempVariantPrice, setTempVariantPrice] = useState<number>(0);
@@ -48,6 +54,7 @@ const App: React.FC = () => {
 
   // --- Inicialização ---
   useEffect(() => {
+    // Carregar Produtos
     const savedProducts = localStorage.getItem('minha_santa_fonte_db_products');
     if (savedProducts) {
       setProducts(JSON.parse(savedProducts));
@@ -56,11 +63,29 @@ const App: React.FC = () => {
       setProducts(initialized);
       localStorage.setItem('minha_santa_fonte_db_products', JSON.stringify(initialized));
     }
+
+    // Carregar Opções do Customizador
+    const savedMaterials = localStorage.getItem('msf_custom_materials');
+    setMaterials(savedMaterials ? JSON.parse(savedMaterials) : INITIAL_MATERIALS);
+    
+    const savedColors = localStorage.getItem('msf_custom_colors');
+    setColors(savedColors ? JSON.parse(savedColors) : INITIAL_COLORS);
+    
+    const savedCrucifixes = localStorage.getItem('msf_custom_crucifixes');
+    setCrucifixes(savedCrucifixes ? JSON.parse(savedCrucifixes) : INITIAL_CRUCIFIXES);
   }, []);
 
   const saveProductsToDB = (updatedList: Product[]) => {
     setProducts([...updatedList]);
     localStorage.setItem('minha_santa_fonte_db_products', JSON.stringify(updatedList));
+  };
+
+  const saveCustomOptions = (type: 'material' | 'color' | 'crucifix', list: RosaryOption[]) => {
+    const key = `msf_custom_${type}s`;
+    localStorage.setItem(key, JSON.stringify(list));
+    if (type === 'material') setMaterials([...list]);
+    if (type === 'color') setColors([...list]);
+    if (type === 'crucifix') setCrucifixes([...list]);
   };
 
   // --- Lógicas de Negócio ---
@@ -115,7 +140,7 @@ const App: React.FC = () => {
       category: "Terços",
       price: finalPrice,
       description: `Customizado: ${customSelections.material?.name}, ${customSelections.color?.name}`,
-      image: customSelections.material?.image || ROSARY_MATERIALS[0].image || "",
+      image: customSelections.material?.image || materials[0]?.image || "",
       quantity: 1,
       stock: 1,
       isCustom: true
@@ -136,6 +161,13 @@ const App: React.FC = () => {
     saveProductsToDB(updated);
   };
 
+  const deleteProduct = (id: string) => {
+    if (window.confirm("Tem certeza que deseja remover este produto?")) {
+      const updated = products.filter(p => p.id !== id);
+      saveProductsToDB(updated);
+    }
+  };
+
   const handleAdminLogin = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -148,30 +180,90 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCreateProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProduct.images || newProduct.images.length === 0) {
       alert("Por favor, adicione pelo menos uma imagem.");
       return;
     }
-    const productToAdd: Product = {
-      id: "prod-" + Date.now(),
-      name: newProduct.name || "Sem Nome",
-      category: newProduct.category || CATEGORIES[1],
-      price: Number(newProduct.price) || 0,
-      stock: Number(newProduct.stock) || 0,
-      description: newProduct.description || "",
-      image: newProduct.images[0],
-      images: newProduct.images,
-      variants: newProduct.variants || [],
-      createdAt: Date.now()
-    };
-    saveProductsToDB([productToAdd, ...products]);
-    setNewProduct({ category: CATEGORIES[1], stock: 10, images: [], variants: [] });
+
+    if (editingProduct) {
+      const updatedList = products.map(p => p.id === editingProduct.id ? {
+        ...p,
+        name: newProduct.name || p.name,
+        category: newProduct.category || p.category,
+        price: Number(newProduct.price) || p.price,
+        stock: Number(newProduct.stock) || p.stock,
+        description: newProduct.description || p.description,
+        image: newProduct.images?.[0] || p.image,
+        images: newProduct.images || p.images,
+        variants: newProduct.variants || p.variants,
+        isFeatured: newProduct.isFeatured
+      } : p);
+      saveProductsToDB(updatedList);
+      setEditingProduct(null);
+      alert("Produto atualizado com sucesso!");
+    } else {
+      const productToAdd: Product = {
+        id: "prod-" + Date.now(),
+        name: newProduct.name || "Sem Nome",
+        category: newProduct.category || CATEGORIES[1],
+        price: Number(newProduct.price) || 0,
+        stock: Number(newProduct.stock) || 0,
+        description: newProduct.description || "",
+        image: newProduct.images[0],
+        images: newProduct.images,
+        variants: newProduct.variants || [],
+        isFeatured: newProduct.isFeatured || false,
+        createdAt: Date.now()
+      };
+      saveProductsToDB([productToAdd, ...products]);
+      alert("Produto cadastrado com sucesso!");
+    }
+    
+    setNewProduct({ category: CATEGORIES[1], stock: 10, images: [], variants: [], isFeatured: false });
     setTempImageUrl("");
     setTempVariantName("");
     setTempVariantPrice(0);
-    alert("Produto cadastrado com sucesso!");
+  };
+
+  const startEditingProduct = (p: Product) => {
+    setEditingProduct(p);
+    setNewProduct({ ...p });
+    setAdminTab('products');
+    window.scrollTo(0, 0);
+  };
+
+  const handleSaveCustomOption = (e: React.FormEvent) => {
+    e.preventDefault();
+    const type = editingCustomOption.type as 'material' | 'color' | 'crucifix';
+    let currentList = type === 'material' ? materials : type === 'color' ? colors : crucifixes;
+    
+    const newOpt: RosaryOption = {
+      id: editingCustomOption.option?.id || `opt-${Date.now()}`,
+      name: tempCustomOption.name || 'Nova Opção',
+      price: Number(tempCustomOption.price) || 0,
+      image: tempCustomOption.image
+    };
+
+    let updatedList;
+    if (editingCustomOption.option) {
+      updatedList = currentList.map(o => o.id === editingCustomOption.option?.id ? newOpt : o);
+    } else {
+      updatedList = [...currentList, newOpt];
+    }
+
+    saveCustomOptions(type, updatedList);
+    setEditingCustomOption({ type: '', option: null });
+    setTempCustomOption({ name: '', price: 0, image: '' });
+  };
+
+  const deleteCustomOption = (type: 'material' | 'color' | 'crucifix', id: string) => {
+    if (window.confirm("Remover esta opção do customizador?")) {
+      const currentList = type === 'material' ? materials : type === 'color' ? colors : crucifixes;
+      const updatedList = currentList.filter(o => o.id !== id);
+      saveCustomOptions(type, updatedList);
+    }
   };
 
   const addImageUrlToProduct = () => {
@@ -307,46 +399,6 @@ const App: React.FC = () => {
                   </div>
                 </div>
               </div>
-
-              <div className="bg-white p-16 rounded-[60px] border border-slate-100 shadow-sm text-center space-y-12">
-                <h3 className="text-3xl font-serif text-slate-900">Nossa Missão e Valores</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-                  <div className="space-y-4">
-                    <div className="w-16 h-16 bg-amber-50 rounded-3xl flex items-center justify-center text-amber-600 mx-auto">
-                      <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                    </div>
-                    <h4 className="font-bold text-slate-900 uppercase text-xs tracking-widest">Fé e Devoção</h4>
-                    <p className="text-slate-500 font-body-serif italic text-sm">Colocamos a espiritualidade no centro de tudo o que fazemos e oferecemos.</p>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="w-16 h-16 bg-amber-50 rounded-3xl flex items-center justify-center text-amber-600 mx-auto">
-                      <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
-                    </div>
-                    <h4 className="font-bold text-slate-900 uppercase text-xs tracking-widest">Excelência Atemporal</h4>
-                    <p className="text-slate-500 font-body-serif italic text-sm">Buscamos materiais de alta qualidade que resistam ao tempo, assim como a tradição.</p>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="w-16 h-16 bg-amber-50 rounded-3xl flex items-center justify-center text-amber-600 mx-auto">
-                      <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-                    </div>
-                    <h4 className="font-bold text-slate-900 uppercase text-xs tracking-widest">Cuidado Humano</h4>
-                    <p className="text-slate-500 font-body-serif italic text-sm">Atendemos cada cliente como um irmão em Cristo, com paciência e carinho.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-center space-y-8 pb-12">
-                <p className="text-slate-500 italic font-body-serif text-xl max-w-2xl mx-auto">
-                  "Onde quer que dois ou três se reúnam em meu nome, ali eu estou no meio deles."
-                </p>
-                <div className="w-12 h-px bg-slate-200 mx-auto"></div>
-                <button 
-                  onClick={() => setCurrentPage(Page.Catalog)} 
-                  className="px-12 py-5 bg-slate-900 text-white rounded-full font-black text-[10px] uppercase tracking-[0.3em] hover:bg-amber-600 transition-all shadow-xl"
-                >
-                  Conhecer Nossos Artigos
-                </button>
-              </div>
             </div>
           </section>
         )}
@@ -365,7 +417,7 @@ const App: React.FC = () => {
                     </div>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                       {customStep === 1 && ROSARY_MATERIALS.map(m => (
+                       {customStep === 1 && materials.map(m => (
                          <button key={m.id} onClick={() => {setCustomSelections({...customSelections, material: m}); setCustomStep(2);}} className="p-4 border-2 border-slate-50 rounded-2xl hover:border-amber-500 transition-all text-left flex items-center gap-4">
                             <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
                                <img src={m.image} className="w-full h-full object-cover" />
@@ -376,13 +428,13 @@ const App: React.FC = () => {
                             </div>
                          </button>
                        ))}
-                       {customStep === 2 && ROSARY_COLORS.map(c => (
+                       {customStep === 2 && colors.map(c => (
                          <button key={c.id} onClick={() => {setCustomSelections({...customSelections, color: c}); setCustomStep(3);}} className="p-4 border-2 border-slate-50 rounded-2xl hover:border-amber-500 transition-all text-left">
                             <p className="font-bold">{c.name}</p>
                             <p className="text-xs text-amber-600">{c.price > 0 ? `+ R$ ${c.price.toFixed(2)}` : 'Opção Clássica'}</p>
                          </button>
                        ))}
-                       {customStep === 3 && ROSARY_CRUCIFIXES.map(x => (
+                       {customStep === 3 && crucifixes.map(x => (
                          <button key={x.id} onClick={() => {setCustomSelections({...customSelections, crucifix: x}); setCustomStep(4);}} className="p-4 border-2 border-slate-50 rounded-2xl hover:border-amber-500 transition-all text-left flex items-center gap-4">
                             <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
                                <img src={x.image} className="w-full h-full object-cover" />
@@ -437,28 +489,21 @@ const App: React.FC = () => {
                              </div>
                           )}
                        </div>
-
                        <div className="p-8 bg-white border-t border-slate-50">
                           <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-6">Confecção Atual</h4>
-                          <div className="space-y-4">
-                             <div className="flex justify-between items-center text-sm">
+                          <div className="space-y-4 text-sm">
+                             <div className="flex justify-between items-center">
                                 <span className="text-slate-500">Base Ateliê</span>
                                 <span className="font-bold">R$ 40.00</span>
                              </div>
                              {customSelections.material && (
-                                <div className="flex justify-between items-center text-sm">
+                                <div className="flex justify-between items-center">
                                    <span className="font-bold text-slate-900">{customSelections.material.name}</span>
                                    <span className="text-amber-600">+{customSelections.material.price.toFixed(2)}</span>
                                 </div>
                              )}
-                             {customSelections.color && (
-                                <div className="flex justify-between items-center text-sm">
-                                   <span className="text-slate-500 italic">Cor: {customSelections.color.name}</span>
-                                   <span className="text-amber-600">+{customSelections.color.price.toFixed(2)}</span>
-                                </div>
-                             )}
                              {customSelections.crucifix && (
-                                <div className="flex justify-between items-center text-sm">
+                                <div className="flex justify-between items-center">
                                    <span className="font-bold text-slate-900">{customSelections.crucifix.name}</span>
                                    <span className="text-amber-600">+{customSelections.crucifix.price.toFixed(2)}</span>
                                 </div>
@@ -467,9 +512,6 @@ const App: React.FC = () => {
                                 <div>
                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Valor Total</p>
                                    <p className="text-3xl font-black text-slate-900">R$ {calculateCustomPrice().toFixed(2)}</p>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-[10px] font-bold text-green-600 uppercase tracking-widest">Pronto para Envio</p>
                                 </div>
                              </div>
                           </div>
@@ -503,98 +545,16 @@ const App: React.FC = () => {
           </section>
         )}
 
-        {currentPage === Page.Product && selectedProduct && (
-           <section className="container mx-auto px-4 py-16">
-              <button onClick={() => setCurrentPage(Page.Catalog)} className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-12 hover:text-slate-900 transition-colors">← Voltar ao Catálogo</button>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
-                 {/* Galeria de Imagens */}
-                 <div className="lg:col-span-7 flex flex-col md:flex-row-reverse gap-6">
-                    <div className="flex-grow aspect-square rounded-[48px] overflow-hidden bg-white border border-slate-100 shadow-sm">
-                       <img 
-                          src={selectedProduct.images?.[activeImageIndex] || selectedProduct.image} 
-                          className="w-full h-full object-cover animate-in fade-in duration-500" 
-                          alt={selectedProduct.name}
-                       />
-                    </div>
-                    {/* Miniaturas */}
-                    <div className="flex md:flex-col gap-4 overflow-x-auto md:overflow-y-auto">
-                       {(selectedProduct.images || [selectedProduct.image]).map((img, idx) => (
-                          <button 
-                             key={idx} 
-                             onClick={() => setActiveImageIndex(idx)}
-                             className={`w-20 h-20 rounded-2xl overflow-hidden border-2 transition-all flex-shrink-0 ${activeImageIndex === idx ? 'border-amber-600 shadow-md' : 'border-white opacity-60 hover:opacity-100'}`}
-                          >
-                             <img src={img} className="w-full h-full object-cover" />
-                          </button>
-                       ))}
-                    </div>
-                 </div>
-
-                 {/* Informações do Produto */}
-                 <div className="lg:col-span-5 space-y-10">
-                    <div>
-                       <span className="text-amber-600 font-black text-[10px] uppercase tracking-[0.3em] mb-4 block">{selectedProduct.category}</span>
-                       <h2 className="text-4xl md:text-5xl font-serif text-slate-900 leading-tight mb-4">{selectedProduct.name}</h2>
-                       <div className="flex items-center space-x-4">
-                          <h3 className="text-3xl font-black text-slate-900">
-                             R$ {(selectedProduct.price + (selectedVariant?.priceDelta || 0)).toFixed(2)}
-                          </h3>
-                          {selectedProduct.stock > 0 ? (
-                             <span className="bg-green-50 text-green-600 text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-green-100">Disponível</span>
-                          ) : (
-                             <span className="bg-red-50 text-red-600 text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-red-100">Esgotado</span>
-                          )}
-                       </div>
-                    </div>
-
-                    {/* Seletor de Variantes */}
-                    {selectedProduct.variants && selectedProduct.variants.length > 0 && (
-                       <div className="space-y-4">
-                          <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Opções Disponíveis</h4>
-                          <div className="flex flex-wrap gap-3">
-                             {selectedProduct.variants.map((v, i) => (
-                                <button 
-                                   key={i} 
-                                   onClick={() => setSelectedVariant(v)}
-                                   className={`px-6 py-3 rounded-2xl text-xs font-bold transition-all border-2 ${selectedVariant?.name === v.name ? 'border-amber-600 bg-amber-50 text-amber-700' : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'}`}
-                                >
-                                   {v.name} {v.priceDelta !== 0 && `(${v.priceDelta > 0 ? '+' : ''} R$ ${v.priceDelta.toFixed(2)})`}
-                                </button>
-                             ))}
-                          </div>
-                       </div>
-                    )}
-
-                    <div className="space-y-4">
-                       <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição do Artigo</h4>
-                       <p className="text-slate-600 font-body-serif leading-relaxed italic text-lg">{selectedProduct.description}</p>
-                    </div>
-
-                    <div className="pt-8 border-t border-slate-100">
-                       <button 
-                          onClick={() => addToCart(selectedProduct)}
-                          disabled={selectedProduct.stock <= 0}
-                          className="w-full py-6 bg-slate-900 text-white rounded-3xl font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:bg-amber-600 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all transform hover:-translate-y-1"
-                       >
-                          ADICIONAR À CESTA 🙏
-                       </button>
-                       <p className="text-center mt-6 text-[10px] font-medium text-slate-400 uppercase tracking-widest">Entrega em todo o Brasil com carinho e proteção</p>
-                    </div>
-                 </div>
-              </div>
-           </section>
-        )}
-
         {currentPage === Page.AdminDashboard && isAdmin && (
            <div className="min-h-screen bg-slate-50 flex">
-              <aside className="w-72 bg-slate-900 text-white p-10 flex flex-col space-y-12">
+              <aside className="w-72 bg-slate-900 text-white p-10 flex flex-col space-y-12 shrink-0">
                  <div className="flex items-center space-x-2 text-amber-500">
                     <IconCross /> <span className="font-bold tracking-tighter text-lg text-white uppercase">Painel Admin</span>
                  </div>
                  <nav className="flex-grow space-y-4">
-                    <button onClick={() => setAdminTab('products')} className={`w-full text-left p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${adminTab === 'products' ? 'bg-amber-600 shadow-xl text-white' : 'text-slate-400 hover:bg-slate-800'}`}>Cadastro</button>
+                    <button onClick={() => setAdminTab('products')} className={`w-full text-left p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${adminTab === 'products' ? 'bg-amber-600 shadow-xl text-white' : 'text-slate-400 hover:bg-slate-800'}`}>Produtos</button>
                     <button onClick={() => setAdminTab('stock')} className={`w-full text-left p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${adminTab === 'stock' ? 'bg-amber-600 shadow-xl text-white' : 'text-slate-400 hover:bg-slate-800'}`}>Controle Estoque</button>
+                    <button onClick={() => setAdminTab('customizer')} className={`w-full text-left p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${adminTab === 'customizer' ? 'bg-amber-600 shadow-xl text-white' : 'text-slate-400 hover:bg-slate-800'}`}>Config. Terço</button>
                     <button onClick={() => setAdminTab('blog')} className={`w-full text-left p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${adminTab === 'blog' ? 'bg-amber-600 shadow-xl text-white' : 'text-slate-400 hover:bg-slate-800'}`}>Blog</button>
                  </nav>
                  <button onClick={() => { setIsAdmin(false); setCurrentPage(Page.Home); }} className="p-4 bg-slate-800 text-slate-400 text-[10px] font-black uppercase rounded-2xl hover:bg-red-500 hover:text-white transition-all">Sair</button>
@@ -602,17 +562,21 @@ const App: React.FC = () => {
 
               <section className="flex-grow p-12 overflow-y-auto">
                  {adminTab === 'products' ? (
-                    <div className="bg-white p-12 rounded-[40px] shadow-sm border border-slate-100 max-w-4xl">
-                       <h3 className="text-2xl font-serif text-slate-900 mb-8">Cadastro de Novo Artigo</h3>
-                       <form onSubmit={handleCreateProduct} className="space-y-8">
+                    <div className="bg-white p-12 rounded-[40px] shadow-sm border border-slate-100 max-w-4xl mx-auto">
+                       <div className="flex justify-between items-center mb-10">
+                          <h3 className="text-2xl font-serif text-slate-900">{editingProduct ? 'Editar Artigo' : 'Cadastro de Novo Artigo'}</h3>
+                          {editingProduct && <button onClick={() => {setEditingProduct(null); setNewProduct({category: CATEGORIES[1], images: []});}} className="text-amber-600 text-[10px] font-black uppercase tracking-widest underline">Cancelar Edição</button>}
+                       </div>
+                       
+                       <form onSubmit={handleSaveProduct} className="space-y-8">
                           <div className="grid grid-cols-2 gap-6">
                              <div className="space-y-1">
                                 <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Nome do Artigo</label>
-                                <input type="text" className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, name: e.target.value }))} required />
+                                <input type="text" value={newProduct.name || ''} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, name: e.target.value }))} required />
                              </div>
                              <div className="space-y-1">
                                 <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Categoria</label>
-                                <select className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, category: e.target.value }))}>
+                                <select value={newProduct.category || CATEGORIES[1]} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, category: e.target.value }))}>
                                    {CATEGORIES.slice(1).map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                              </div>
@@ -620,21 +584,31 @@ const App: React.FC = () => {
                           <div className="grid grid-cols-2 gap-6">
                              <div className="space-y-1">
                                 <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Preço Base (R$)</label>
-                                <input type="number" step="0.01" className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, price: Number(e.target.value) }))} required />
+                                <input type="number" value={newProduct.price || 0} step="0.01" className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, price: Number(e.target.value) }))} required />
                              </div>
                              <div className="space-y-1">
                                 <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Estoque Inicial</label>
-                                <input type="number" className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, stock: Number(e.target.value) }))} required />
+                                <input type="number" value={newProduct.stock || 0} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, stock: Number(e.target.value) }))} required />
                              </div>
                           </div>
                           
-                          {/* Variantes */}
+                          <div className="flex items-center space-x-3 bg-slate-50 p-6 rounded-3xl border">
+                             <input 
+                                type="checkbox" 
+                                id="isFeatured" 
+                                checked={newProduct.isFeatured || false} 
+                                onChange={e => setNewProduct(p => ({...p, isFeatured: e.target.checked}))}
+                                className="w-5 h-5 accent-amber-600"
+                             />
+                             <label htmlFor="isFeatured" className="text-[10px] font-black uppercase text-slate-600 tracking-widest cursor-pointer">Produto em Destaque na Home</label>
+                          </div>
+
                           <div className="space-y-4 pt-6 border-t">
                              <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest block">Variantes (Ex: Cores, Tamanhos)</label>
                              <div className="flex gap-4">
                                 <input type="text" className="flex-grow p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" placeholder="Ex: Cor Prata" value={tempVariantName} onChange={e => setTempVariantName(e.target.value)} />
                                 <input type="number" step="0.01" className="w-32 p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" placeholder="+ R$ 0.00" value={tempVariantPrice} onChange={e => setTempVariantPrice(Number(e.target.value))} />
-                                <button type="button" onClick={addVariantToProduct} className="px-8 bg-slate-100 text-slate-900 rounded-3xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all">Adicionar Variante</button>
+                                <button type="button" onClick={addVariantToProduct} className="px-8 bg-slate-100 text-slate-900 rounded-3xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all">Adicionar</button>
                              </div>
                              <div className="flex flex-wrap gap-2">
                                 {newProduct.variants?.map((v, i) => (
@@ -646,12 +620,11 @@ const App: React.FC = () => {
                              </div>
                           </div>
 
-                          {/* Galeria de Imagens */}
                           <div className="space-y-4 pt-6 border-t">
-                             <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Galeria de Imagens (Adicione URLs)</label>
+                             <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Galeria de Imagens (URLs)</label>
                              <div className="flex gap-4">
                                 <input type="url" className="flex-grow p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" placeholder="https://exemplo.com/imagem.jpg" value={tempImageUrl} onChange={e => setTempImageUrl(e.target.value)} />
-                                <button type="button" onClick={addImageUrlToProduct} className="px-8 bg-slate-100 text-slate-900 rounded-3xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all">Adicionar Foto</button>
+                                <button type="button" onClick={addImageUrlToProduct} className="px-8 bg-slate-100 text-slate-900 rounded-3xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all">Adicionar</button>
                              </div>
                              <div className="grid grid-cols-5 gap-4 mt-4">
                                 {newProduct.images?.map((url, idx) => (
@@ -669,19 +642,21 @@ const App: React.FC = () => {
 
                           <div className="space-y-1 pt-6 border-t">
                              <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Descrição Detalhada</label>
-                             <textarea rows={4} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, description: e.target.value }))} required></textarea>
+                             <textarea rows={4} value={newProduct.description || ''} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none" onChange={e => setNewProduct(p => ({ ...p, description: e.target.value }))} required></textarea>
                           </div>
-                          <button type="submit" className="w-full py-6 bg-slate-900 text-white rounded-3xl font-black text-xs uppercase tracking-[0.3em] shadow-xl hover:bg-amber-600 transition-all">Publicar no Catálogo</button>
+                          <button type="submit" className="w-full py-6 bg-slate-900 text-white rounded-3xl font-black text-xs uppercase tracking-[0.3em] shadow-xl hover:bg-amber-600 transition-all">
+                             {editingProduct ? 'Salvar Alterações' : 'Publicar no Catálogo'}
+                          </button>
                        </form>
                     </div>
                  ) : adminTab === 'stock' ? (
-                    <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
+                    <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden mx-auto max-w-5xl">
                        <table className="w-full text-left">
                           <thead className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
                              <tr>
                                 <th className="px-10 py-8">Item</th>
                                 <th className="px-10 py-8 text-center">Estoque</th>
-                                <th className="px-10 py-8 text-right">Ação</th>
+                                <th className="px-10 py-8 text-right">Ações</th>
                              </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
@@ -690,22 +665,154 @@ const App: React.FC = () => {
                                    <td className="px-10 py-6">
                                       <div className="flex items-center space-x-4">
                                          <img src={p.image} className="w-12 h-12 rounded-xl object-cover" />
-                                         <span className="font-bold text-slate-800">{p.name}</span>
+                                         <div>
+                                            <p className="font-bold text-slate-800">{p.name}</p>
+                                            <p className="text-[9px] uppercase tracking-widest text-amber-600 font-black">{p.category}</p>
+                                         </div>
                                       </div>
                                    </td>
                                    <td className="px-10 py-6 text-center">
                                       <span className={`font-black text-xl ${p.stock < 5 ? 'text-amber-600' : 'text-slate-900'}`}>{p.stock}</span>
                                    </td>
                                    <td className="px-10 py-6 text-right">
-                                      <div className="flex justify-end space-x-2">
-                                         <button onClick={() => updateStock(p.id, -1)} className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg hover:bg-slate-200 transition-all">-</button>
-                                         <button onClick={() => updateStock(p.id, 1)} className="w-8 h-8 flex items-center justify-center bg-slate-900 text-white rounded-lg hover:bg-amber-600 transition-all">+</button>
+                                      <div className="flex justify-end space-x-3">
+                                         <button onClick={() => updateStock(p.id, -1)} className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg hover:bg-slate-200">-</button>
+                                         <button onClick={() => updateStock(p.id, 1)} className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg hover:bg-slate-200">+</button>
+                                         <div className="w-px h-8 bg-slate-100 mx-2"></div>
+                                         <button onClick={() => startEditingProduct(p)} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all">Editar</button>
+                                         <button onClick={() => deleteProduct(p.id)} className="px-4 py-2 bg-red-50 text-red-500 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">Excluir</button>
                                       </div>
                                    </td>
                                 </tr>
                              ))}
                           </tbody>
                        </table>
+                    </div>
+                 ) : adminTab === 'customizer' ? (
+                    <div className="max-w-5xl mx-auto space-y-12">
+                       <h3 className="text-3xl font-serif text-slate-900">Configuração do Monte seu Terço</h3>
+                       
+                       {/* Seção Gerenciamento de Opções */}
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                          <div className="bg-white p-10 rounded-[40px] shadow-sm border border-slate-100">
+                             <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-8">{editingCustomOption.option ? 'Editar Opção' : 'Adicionar Nova Opção'}</h4>
+                             <form onSubmit={handleSaveCustomOption} className="space-y-6">
+                                <div className="space-y-1">
+                                   <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Tipo de Item</label>
+                                   <select 
+                                      className="w-full p-4 bg-slate-50 border rounded-2xl outline-none"
+                                      value={editingCustomOption.type}
+                                      onChange={e => setEditingCustomOption(prev => ({...prev, type: e.target.value}))}
+                                      required
+                                   >
+                                      <option value="">Selecione...</option>
+                                      <option value="material">Material (Contas)</option>
+                                      <option value="color">Cor</option>
+                                      <option value="crucifix">Crucifixo</option>
+                                   </select>
+                                </div>
+                                <div className="space-y-1">
+                                   <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Nome da Opção</label>
+                                   <input 
+                                      type="text" 
+                                      className="w-full p-4 bg-slate-50 border rounded-2xl outline-none"
+                                      value={tempCustomOption.name || ''}
+                                      onChange={e => setTempCustomOption(prev => ({...prev, name: e.target.value}))}
+                                      required
+                                   />
+                                </div>
+                                <div className="space-y-1">
+                                   <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Preço Adicional (R$)</label>
+                                   <input 
+                                      type="number" 
+                                      step="0.01" 
+                                      className="w-full p-4 bg-slate-50 border rounded-2xl outline-none"
+                                      value={tempCustomOption.price || 0}
+                                      onChange={e => setTempCustomOption(prev => ({...prev, price: Number(e.target.value)}))}
+                                      required
+                                   />
+                                </div>
+                                {(editingCustomOption.type === 'material' || editingCustomOption.type === 'crucifix') && (
+                                   <div className="space-y-1">
+                                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">URL da Foto</label>
+                                      <input 
+                                         type="url" 
+                                         className="w-full p-4 bg-slate-50 border rounded-2xl outline-none"
+                                         value={tempCustomOption.image || ''}
+                                         onChange={e => setTempCustomOption(prev => ({...prev, image: e.target.value}))}
+                                         required
+                                      />
+                                   </div>
+                                )}
+                                <div className="flex gap-4 pt-4">
+                                   <button type="submit" className="flex-grow py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-600 transition-all">Salvar Opção</button>
+                                   {editingCustomOption.option && <button type="button" onClick={() => {setEditingCustomOption({type: '', option: null}); setTempCustomOption({name: '', price: 0, image: ''});}} className="px-6 border rounded-2xl text-[9px] font-black uppercase">Cancelar</button>}
+                                </div>
+                             </form>
+                          </div>
+
+                          <div className="space-y-8">
+                             {/* Listagem Materiais */}
+                             <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
+                                <div className="p-6 bg-slate-50 border-b flex justify-between">
+                                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Materiais (Contas)</span>
+                                </div>
+                                <div className="divide-y text-sm">
+                                   {materials.map(m => (
+                                      <div key={m.id} className="p-4 flex items-center justify-between group">
+                                         <div className="flex items-center gap-3">
+                                            <img src={m.image} className="w-10 h-10 rounded-lg object-cover" />
+                                            <span className="font-bold">{m.name}</span>
+                                         </div>
+                                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                            <button onClick={() => {setEditingCustomOption({type: 'material', option: m}); setTempCustomOption(m);}} className="text-blue-500 text-[9px] font-black uppercase">Editar</button>
+                                            <button onClick={() => deleteCustomOption('material', m.id)} className="text-red-500 text-[9px] font-black uppercase">Remover</button>
+                                         </div>
+                                      </div>
+                                   ))}
+                                </div>
+                             </div>
+
+                             {/* Listagem Crucifixos */}
+                             <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
+                                <div className="p-6 bg-slate-50 border-b flex justify-between">
+                                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Crucifixos</span>
+                                </div>
+                                <div className="divide-y text-sm">
+                                   {crucifixes.map(x => (
+                                      <div key={x.id} className="p-4 flex items-center justify-between group">
+                                         <div className="flex items-center gap-3">
+                                            <img src={x.image} className="w-10 h-10 rounded-lg object-cover" />
+                                            <span className="font-bold">{x.name}</span>
+                                         </div>
+                                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                            <button onClick={() => {setEditingCustomOption({type: 'crucifix', option: x}); setTempCustomOption(x);}} className="text-blue-500 text-[9px] font-black uppercase">Editar</button>
+                                            <button onClick={() => deleteCustomOption('crucifix', x.id)} className="text-red-500 text-[9px] font-black uppercase">Remover</button>
+                                         </div>
+                                      </div>
+                                   ))}
+                                </div>
+                             </div>
+
+                             {/* Listagem Cores */}
+                             <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
+                                <div className="p-6 bg-slate-50 border-b flex justify-between">
+                                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Cores</span>
+                                </div>
+                                <div className="divide-y text-sm">
+                                   {colors.map(c => (
+                                      <div key={c.id} className="p-4 flex items-center justify-between group">
+                                         <span className="font-bold">{c.name}</span>
+                                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                            <button onClick={() => {setEditingCustomOption({type: 'color', option: c}); setTempCustomOption(c);}} className="text-blue-500 text-[9px] font-black uppercase">Editar</button>
+                                            <button onClick={() => deleteCustomOption('color', c.id)} className="text-red-500 text-[9px] font-black uppercase">Remover</button>
+                                         </div>
+                                      </div>
+                                   ))}
+                                </div>
+                             </div>
+                          </div>
+                       </div>
                     </div>
                  ) : (
                     <div className="text-center py-20 text-slate-400 italic">Área do Blog em manutenção.</div>
@@ -729,7 +836,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* FOOTER RESTAURADO CONFORME IMAGEM */}
       <footer className="bg-[#0a0f1a] text-slate-400 py-20 px-6 border-t border-white/5">
         <div className="container mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 mb-20">
           <div className="space-y-6">
@@ -744,9 +850,9 @@ const App: React.FC = () => {
           <div>
             <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Navegação</h3>
             <ul className="space-y-4 text-[11px] font-bold uppercase tracking-widest">
-              <li><button onClick={() => setCurrentPage(Page.Home)} className="hover:text-amber-500 transition-colors">Início</button></li>
-              <li><button onClick={() => setCurrentPage(Page.Catalog)} className="hover:text-amber-500 transition-colors">Catálogo</button></li>
-              <li><button onClick={() => setCurrentPage(Page.About)} className="hover:text-amber-500 transition-colors">Sobre Nós</button></li>
+              <li><button onClick={() => setCurrentPage(Page.Home)} className="hover:text-white transition-colors">Início</button></li>
+              <li><button onClick={() => setCurrentPage(Page.Catalog)} className="hover:text-white transition-colors">Catálogo</button></li>
+              <li><button onClick={() => setCurrentPage(Page.About)} className="hover:text-white transition-colors">Sobre Nós</button></li>
               <li><button onClick={() => setCurrentPage(Page.AdminLogin)} className="text-amber-600 hover:text-amber-500 transition-colors">Administração</button></li>
             </ul>
           </div>
@@ -761,33 +867,18 @@ const App: React.FC = () => {
                 <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center"><IconPhone /></div>
                 <span>(11) 99999-9999</span>
               </li>
-              <li className="flex items-center space-x-4">
-                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center"><IconPin /></div>
-                <span>São Paulo, Brasil</span>
-              </li>
             </ul>
           </div>
           <div>
-            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Inspiracional</h3>
-            <p className="font-body-serif italic text-xs mb-8 leading-relaxed opacity-60">
-              "Que a paz de Cristo reine em vossos corações e que sua luz ilumine vosso lar todos os dias."
-            </p>
+            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-8">Newsletter</h3>
             <div className="flex bg-white/5 rounded-xl overflow-hidden p-1">
-              <input type="email" placeholder="Seu e-mail de fé" className="bg-transparent border-none outline-none px-4 py-3 text-xs flex-grow text-white placeholder:text-slate-600" />
-              <button className="bg-[#e68a00] text-white px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-amber-500 transition-colors">Amém</button>
+              <input type="email" placeholder="Seu e-mail de fé" className="bg-transparent border-none outline-none px-4 py-3 text-xs flex-grow text-white" />
+              <button className="bg-[#e68a00] text-white px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-lg">Amém</button>
             </div>
-          </div>
-        </div>
-        <div className="container mx-auto pt-10 border-t border-white/5 flex flex-col md:flex-row justify-between items-center text-[10px] font-black uppercase tracking-[0.2em] opacity-40">
-          <p>© 2026 MINHA SANTA FONTE</p>
-          <div className="flex space-x-8 mt-4 md:mt-0">
-            <button className="hover:text-white transition-colors">Política de Privacidade</button>
-            <button className="hover:text-white transition-colors">Termos de Uso</button>
           </div>
         </div>
       </footer>
 
-      {/* WHATSAPP FLOATER RESTAURADO CONFORME IMAGEM */}
       <a 
         href="https://wa.me/5511999999999" 
         target="_blank" 
@@ -796,7 +887,6 @@ const App: React.FC = () => {
         <IconWhatsApp />
       </a>
 
-      {/* Cart Drawer */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsCartOpen(false)}></div>
@@ -806,7 +896,7 @@ const App: React.FC = () => {
                  <button onClick={() => setIsCartOpen(false)} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900">Fechar ✕</button>
               </div>
               <div className="flex-grow overflow-y-auto space-y-6">
-                 {cart.map((item, idx) => (
+                 {cart.length === 0 ? <p className="text-center py-20 text-slate-400 italic">Sua cesta está vazia.</p> : cart.map((item, idx) => (
                    <div key={`${item.id}-${idx}`} className="flex gap-4 border-b border-slate-50 pb-4">
                       <img src={item.image} className="w-16 h-16 rounded-xl object-cover" />
                       <div className="flex-grow">
@@ -814,9 +904,9 @@ const App: React.FC = () => {
                          {item.selectedVariant && (
                             <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">{item.selectedVariant.name}</p>
                          )}
-                         <p className="text-amber-600 font-bold">R$ {item.price.toFixed(2)}</p>
+                         <p className="text-amber-600 font-bold text-sm">R$ {item.price.toFixed(2)} x {item.quantity}</p>
                       </div>
-                      <button onClick={() => removeFromCart(item.id, item.selectedVariant?.name)} className="text-[9px] text-red-400 font-black uppercase tracking-widest hover:text-red-600">Remover</button>
+                      <button onClick={() => removeFromCart(item.id, item.selectedVariant?.name)} className="text-[9px] text-red-400 font-black uppercase tracking-widest hover:text-red-600 self-center">Remover</button>
                    </div>
                  ))}
               </div>
