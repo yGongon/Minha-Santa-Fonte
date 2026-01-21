@@ -12,12 +12,13 @@ import { supabase } from './supabaseClient';
 const ITEMS_PER_PAGE = 8;
 const WHATSAPP_NUMBER = "5575992257902"; 
 
-// Interface para o Balanço Financeiro
+// Interface para Vendas/Produção
 interface SaleEntry {
   id: string;
   date: string;
   description: string;
   value: number;
+  status: 'pending' | 'in_progress' | 'done'; // Novo campo de status
 }
 
 const App: React.FC = () => {
@@ -26,7 +27,7 @@ const App: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [loginError, setLoginError] = useState("");
-  const [adminTab, setAdminTab] = useState<'products' | 'stock' | 'customizer' | 'balance'>('products');
+  const [adminTab, setAdminTab] = useState<'products' | 'stock' | 'customizer' | 'balance' | 'production'>('products');
 
   // --- Estados de Dados ---
   const [products, setProducts] = useState<Product[]>([]);
@@ -35,7 +36,7 @@ const App: React.FC = () => {
   const [crucifixes, setCrucifixes] = useState<RosaryOption[]>([]);
   const [baseRosaryPrice, setBaseRosaryPrice] = useState<number>(40.00);
   
-  // Estado para o Balanço Financeiro
+  // Estado para o Balanço Financeiro e Produção
   const [salesHistory, setSalesHistory] = useState<SaleEntry[]>([]);
   const [newSale, setNewSale] = useState({ description: '', value: '' });
 
@@ -133,9 +134,16 @@ const App: React.FC = () => {
       setProducts(INITIAL_PRODUCTS.map(p => ({ ...p, images: p.images || [p.image], createdAt: Date.now() })));
     }
 
-    // 2. Vendas
+    // 2. Vendas e Produção
     const { data: salesData } = await supabase.from('sales').select('*').order('id', { ascending: false });
-    if (salesData) setSalesHistory(salesData);
+    if (salesData) {
+      // Garante que o status tenha um valor padrão se vier nulo do banco antigo
+      const formattedSales = salesData.map((s: any) => ({
+        ...s,
+        status: s.status || 'pending'
+      }));
+      setSalesHistory(formattedSales);
+    }
 
     // 3. Opções do Ateliê
     const { data: optionsData } = await supabase.from('custom_options').select('*');
@@ -310,7 +318,7 @@ const App: React.FC = () => {
     await supabase.from('config').upsert({ key: 'base_rosary_price', value: val.toString() });
   };
 
-  // --- Funções do Balanço Financeiro (Supabase) ---
+  // --- Funções do Balanço Financeiro / Produção (Supabase) ---
   const handleAddSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSale.description || !newSale.value) return;
@@ -319,7 +327,8 @@ const App: React.FC = () => {
       id: `sale-${Date.now()}`,
       date: new Date().toLocaleDateString('pt-BR'),
       description: newSale.description,
-      value: Number(newSale.value)
+      value: Number(newSale.value),
+      status: 'pending' // Novo pedido entra como 'A Fazer'
     };
     
     const { error } = await supabase.from('sales').insert(entry);
@@ -333,8 +342,15 @@ const App: React.FC = () => {
     setNewSale({ description: '', value: '' });
   };
 
+  const updateSaleStatus = async (id: string, newStatus: 'pending' | 'in_progress' | 'done') => {
+    const { error } = await supabase.from('sales').update({ status: newStatus }).eq('id', id);
+    if (!error) {
+       setSalesHistory(salesHistory.map(s => s.id === id ? { ...s, status: newStatus } : s));
+    }
+  };
+
   const deleteSale = async (id: string) => {
-    if (window.confirm("Deseja remover este registro do histórico?")) {
+    if (window.confirm("Deseja remover este registro?")) {
       const { error } = await supabase.from('sales').delete().eq('id', id);
       if (!error) {
         setSalesHistory(salesHistory.filter(s => s.id !== id));
@@ -761,302 +777,6 @@ const App: React.FC = () => {
            </section>
         )}
 
-        {/* --- CATÁLOGO --- */}
-        {currentPage === Page.Catalog && (
-          <section className="container mx-auto px-4 py-16 md:py-20 animate-in fade-in duration-700">
-             {/* Cabeçalho do Catálogo */}
-             <div className="mb-12 space-y-2 text-center md:text-left">
-                <h2 className="text-4xl md:text-5xl font-serif text-slate-900">Catálogo de Fé</h2>
-                <p className="text-slate-400 italic font-body-serif">Explore nossa curadoria de artigos sagrados.</p>
-             </div>
-
-             {/* Painel de Filtros Organizado */}
-             <div className="bg-white p-6 md:p-8 rounded-[40px] border border-slate-100 shadow-sm mb-12 space-y-8 animate-in slide-in-from-top-4 duration-500">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-                   {/* Busca */}
-                   <div className="lg:col-span-4 relative group">
-                      <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-amber-600 transition-colors">
-                        <IconSearch />
-                      </div>
-                      <input 
-                        type="text" 
-                        placeholder="O que você busca hoje?..." 
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-14 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all text-sm font-medium"
-                      />
-                   </div>
-
-                   {/* Ordenação */}
-                   <div className="lg:col-span-3 flex items-center gap-3">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Ordenar por:</span>
-                      <select 
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value)}
-                        className="flex-grow p-3.5 bg-slate-50 border border-slate-100 rounded-xl outline-none text-[10px] font-bold uppercase tracking-widest cursor-pointer focus:border-amber-500 transition-all"
-                      >
-                         <option value="recent">Mais Recentes</option>
-                         <option value="price_asc">Menor Preço</option>
-                         <option value="price_desc">Maior Preço</option>
-                      </select>
-                   </div>
-
-                   {/* Resumo de Resultados */}
-                   <div className="lg:col-span-5 flex justify-end items-center gap-4 text-slate-400">
-                      <div className="h-px flex-grow bg-slate-50 hidden lg:block"></div>
-                      <p className="text-[10px] font-black uppercase tracking-widest">
-                         {filteredProducts.length} {filteredProducts.length === 1 ? 'Artigo encontrado' : 'Artigos encontrados'}
-                      </p>
-                   </div>
-                </div>
-
-                {/* Categorias como Chips */}
-                <div className="pt-6 border-t border-slate-50">
-                   <div className="flex flex-wrap gap-2 justify-center lg:justify-start">
-                      {CATEGORIES.map((c) => {
-                        const count = c === "Todos" ? products.length : products.filter(p => p.category === c).length;
-                        return (
-                          <button 
-                            key={c} 
-                            onClick={() => setSelectedCategory(c)} 
-                            className={`px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all duration-300 flex items-center gap-2 ${selectedCategory === c ? 'bg-slate-900 text-white shadow-xl border-slate-900 scale-105' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300 hover:text-slate-600'}`}
-                          >
-                            {c}
-                            <span className={`text-[8px] px-1.5 py-0.5 rounded-full ${selectedCategory === c ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'}`}>{count}</span>
-                          </button>
-                        );
-                      })}
-                   </div>
-                </div>
-             </div>
-             
-             {/* Grade de Produtos */}
-             {paginatedProducts.length > 0 ? (
-               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 md:gap-10 mb-20 min-h-[600px] content-start">
-                  {paginatedProducts.map((p, idx) => (
-                    <div 
-                      key={p.id} 
-                      className="group cursor-pointer space-y-4 animate-in fade-in slide-in-from-bottom-6 duration-500" 
-                      style={{ animationDelay: `${idx * 100}ms` }}
-                      onClick={() => navigateToProduct(p)}
-                    >
-                       <div className="aspect-square bg-white rounded-[32px] md:rounded-[48px] overflow-hidden border border-slate-100 relative shadow-sm group-hover:shadow-2xl group-hover:-translate-y-2 transition-all duration-700">
-                          <img src={p.image} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-1000 ease-in-out" alt={p.name} />
-                          {p.stock === 0 && <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center text-white text-[10px] font-black uppercase tracking-widest">Esgotado</div>}
-                       </div>
-                       <div className="px-2 space-y-1">
-                         <h4 className="font-bold text-sm md:text-base text-slate-800 truncate group-hover:text-amber-700 transition-colors">{p.name}</h4>
-                         <p className="text-amber-600 font-bold text-base md:text-lg">R$ {p.price.toFixed(2)}</p>
-                       </div>
-                    </div>
-                  ))}
-               </div>
-             ) : (
-                <div className="py-32 text-center animate-in zoom-in-95 duration-700">
-                   <div className="text-6xl mb-6 opacity-20">🕊️</div>
-                   <h3 className="text-2xl font-serif text-slate-900 mb-2">Nenhum artigo encontrado</h3>
-                   <p className="text-slate-400 font-body-serif italic max-w-sm mx-auto">Tente ajustar seus filtros ou buscar por outros termos de oração.</p>
-                   <button 
-                    onClick={() => {setSearchTerm(""); setSelectedCategory("Todos");}} 
-                    className="mt-8 px-8 py-3 bg-slate-900 text-white rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all"
-                   >
-                    Limpar Filtros
-                   </button>
-                </div>
-             )}
-
-             {/* Paginação Inteligente */}
-             {totalCatalogPages > 1 && (
-               <div className="flex flex-col items-center gap-8 mt-12 animate-in slide-in-from-bottom-6 duration-1000">
-                 <div className="flex items-center gap-3">
-                   {/* Botão Anterior */}
-                   <button 
-                    onClick={() => {setCatalogPage(prev => Math.max(prev - 1, 1)); window.scrollTo({ top: 400, behavior: 'smooth' });}}
-                    disabled={catalogPage === 1}
-                    className={`flex items-center justify-center gap-2 pl-4 pr-6 py-4 rounded-full border border-slate-100 text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 ${catalogPage === 1 ? 'opacity-30 cursor-not-allowed text-slate-300' : 'bg-white hover:bg-slate-900 hover:text-white hover:shadow-2xl'}`}
-                   >
-                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
-                     Anterior
-                   </button>
-                   
-                   {/* Números das Páginas */}
-                   <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-full border border-slate-100 shadow-sm">
-                     {Array.from({ length: totalCatalogPages }).map((_, i) => {
-                        const pageNum = i + 1;
-                        return (
-                          <button
-                            key={pageNum}
-                            onClick={() => {setCatalogPage(pageNum); window.scrollTo({ top: 400, behavior: 'smooth' });}}
-                            className={`w-10 h-10 rounded-full text-[11px] font-black transition-all duration-300 ${catalogPage === pageNum ? 'bg-amber-600 text-white shadow-[0_10px_20px_-5px_rgba(217,119,6,0.4)] scale-110' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'}`}
-                          >
-                            {pageNum}
-                          </button>
-                        );
-                     })}
-                   </div>
-
-                   {/* Botão Próximo */}
-                   <button 
-                    onClick={() => {setCatalogPage(prev => Math.min(prev + 1, totalCatalogPages)); window.scrollTo({ top: 400, behavior: 'smooth' });}}
-                    disabled={catalogPage === totalCatalogPages}
-                    className={`flex items-center justify-center gap-2 pl-6 pr-4 py-4 rounded-full border border-slate-100 text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 ${catalogPage === totalCatalogPages ? 'opacity-30 cursor-not-allowed text-slate-300' : 'bg-white hover:bg-slate-900 hover:text-white hover:shadow-2xl'}`}
-                   >
-                     Próximo
-                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
-                   </button>
-                 </div>
-                 
-                 {/* Indicador de Status da Paginação */}
-                 <div className="flex flex-col items-center gap-2">
-                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-300">
-                       Exibindo {((catalogPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(catalogPage * ITEMS_PER_PAGE, filteredProducts.length)} de {filteredProducts.length} artigos
-                    </p>
-                    <div className="w-32 h-1 bg-slate-100 rounded-full overflow-hidden">
-                       <div 
-                        className="h-full bg-amber-600 transition-all duration-500" 
-                        style={{ width: `${(catalogPage / totalCatalogPages) * 100}%` }}
-                       ></div>
-                    </div>
-                 </div>
-               </div>
-             )}
-          </section>
-        )}
-
-        {/* --- PÁGINA DO PRODUTO --- */}
-        {currentPage === Page.Product && selectedProduct && (
-          <section className="container mx-auto px-6 py-12 md:py-20 animate-in fade-in duration-700">
-            <button 
-              onClick={() => navigateToPage(Page.Catalog)} 
-              className="group flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mb-12 hover:text-slate-900 transition-colors"
-            >
-              <span className="group-hover:-translate-x-1 transition-transform">←</span> Voltar ao Catálogo
-            </button>
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 md:gap-20 items-start">
-              <div className="lg:col-span-7 flex flex-col gap-6">
-                <div className="aspect-square rounded-[48px] md:rounded-[64px] overflow-hidden bg-white border border-slate-100 shadow-xl relative group">
-                   <img 
-                    src={selectedVariant?.image || selectedProduct.images?.[activeImageIndex] || selectedProduct.image} 
-                    className="w-full h-full object-cover transition-all duration-1000 ease-in-out group-hover:scale-105" 
-                    alt={selectedProduct.name} 
-                   />
-                   {selectedVariant?.image && (
-                      <div className="absolute top-6 right-6 bg-amber-600/90 text-white px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest backdrop-blur-sm shadow-xl animate-in zoom-in duration-500">
-                        Opção: {selectedVariant.name}
-                      </div>
-                   )}
-                </div>
-                <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-                  {(selectedProduct.images || [selectedProduct.image]).map((img, idx) => (
-                    <button 
-                      key={idx} 
-                      onClick={() => {setActiveImageIndex(idx); setSelectedVariant(null);}} 
-                      className={`w-20 h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden border-2 flex-shrink-0 transition-all duration-300 ${activeImageIndex === idx && !selectedVariant ? 'border-amber-600 scale-105 shadow-lg' : 'border-transparent opacity-50 hover:opacity-100 hover:scale-95'}`}
-                    >
-                      <img src={img} className="w-full h-full object-cover" alt="galeria" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="lg:col-span-5 space-y-10 md:space-y-14">
-                <div className="space-y-4">
-                   <span className="text-amber-600 font-bold text-[10px] uppercase tracking-[0.5em] mb-2 block animate-in fade-in slide-in-from-top-2">{selectedProduct.category}</span>
-                   <h2 className="text-3xl md:text-5xl font-serif text-slate-900 leading-tight animate-in fade-in slide-in-from-top-4 duration-700">{selectedProduct.name}</h2>
-                   <div className="flex items-center space-x-4 animate-in fade-in slide-in-from-top-6 duration-1000">
-                      <h3 className="text-3xl md:text-4xl font-black text-slate-900">R$ {(selectedProduct.price + (selectedVariant?.priceDelta || 0)).toFixed(2)}</h3>
-                   </div>
-                </div>
-
-                {selectedProduct.variants && selectedProduct.variants.length > 0 && (
-                   <div className="space-y-4 animate-in fade-in slide-in-from-top-8 duration-1000">
-                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Escolha uma Variação</h4>
-                      <div className="flex flex-wrap gap-3">
-                         {selectedProduct.variants.map((v, i) => (
-                            <button 
-                              key={i} 
-                              onClick={() => setSelectedVariant(v)} 
-                              className={`px-6 py-4 rounded-[20px] text-[11px] font-bold transition-all border flex items-center gap-3 ${selectedVariant?.name === v.name ? 'border-amber-600 bg-amber-50 text-amber-900 ring-4 ring-amber-600/10 scale-105' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-300 hover:scale-[0.98]'}`}
-                            >
-                               {v.image && <img src={v.image} className="w-6 h-6 rounded-full object-cover border border-white shadow-sm" alt="" />}
-                               {v.name}
-                            </button>
-                         ))}
-                      </div>
-                   </div>
-                )}
-
-                <div className="space-y-4 animate-in fade-in slide-in-from-top-10 duration-1000">
-                   <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição Detalhada</h4>
-                   <p className="text-slate-600 font-body-serif italic text-lg leading-relaxed">{selectedProduct.description}</p>
-                </div>
-
-                <div className="flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-10 duration-1000">
-                  {/* Seção de Compartilhamento */}
-                  <div className="pt-4 space-y-4 border-t border-slate-100">
-                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Propagar a Fé (Compartilhar)</h4>
-                    <div className="flex flex-wrap gap-3">
-                      <a 
-                        href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Confira este artigo religioso na Minha Santa Fonte: ${selectedProduct.name} - ${window.location.href}`)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-3 bg-[#25D366] text-white rounded-2xl hover:scale-110 active:scale-95 transition-all shadow-md hover:shadow-xl"
-                        title="WhatsApp"
-                      >
-                        <IconWhatsApp size="w-5 h-5" />
-                      </a>
-                      <a 
-                        href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-3 bg-[#1877F2] text-white rounded-2xl hover:scale-110 active:scale-95 transition-all shadow-md hover:shadow-xl"
-                        title="Facebook"
-                      >
-                        <IconFacebook />
-                      </a>
-                      <a 
-                        href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`Confira este artigo religioso na Minha Santa Fonte: ${selectedProduct.name}`)}&url=${encodeURIComponent(window.location.href)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-3 bg-[#000000] text-white rounded-2xl hover:scale-110 active:scale-95 transition-all shadow-md hover:shadow-xl"
-                        title="Twitter / X"
-                      >
-                        <IconTwitter />
-                      </a>
-                      <button 
-                        onClick={copyProductLink}
-                        className={`p-3 rounded-2xl hover:scale-110 active:scale-95 transition-all shadow-md hover:shadow-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${copyFeedback ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                      >
-                        <IconLink />
-                        {copyFeedback ? 'Copiado!' : 'Copiar Link'}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="p-8 bg-slate-50 rounded-[40px] border border-slate-100 flex items-center justify-between">
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Disponibilidade</p>
-                      <p className={`text-base font-bold ${selectedProduct.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {selectedProduct.stock > 0 ? `${selectedProduct.stock} unidades prontas` : 'Sob Encomenda'}
-                      </p>
-                    </div>
-                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-amber-600 shadow-sm">
-                      <IconCross />
-                    </div>
-                  </div>
-                  
-                  <button 
-                    onClick={() => addToCart(selectedProduct)} 
-                    disabled={selectedProduct.stock <= 0} 
-                    className="w-full py-6 bg-slate-900 text-white rounded-[28px] font-black text-[11px] uppercase tracking-[0.4em] shadow-[0_30px_60px_-15px_rgba(15,23,42,0.4)] hover:bg-amber-600 transition-all hover:-translate-y-2 active:scale-95 active:translate-y-0 disabled:bg-slate-300 disabled:shadow-none"
-                  >
-                    Levar para Minha Casa 🙏
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
         {/* --- DASHBOARD ADMINISTRATIVO --- */}
         {currentPage === Page.AdminDashboard && isAdmin && (
            <div className="min-h-screen bg-[#f8fafc] flex flex-col lg:flex-row font-sans">
@@ -1074,6 +794,7 @@ const App: React.FC = () => {
                       { id: 'products', label: 'Artigos', icon: '🛍️' },
                       { id: 'stock', label: 'Inventário', icon: '📦' },
                       { id: 'customizer', label: 'Ateliê', icon: '🎨' },
+                      { id: 'production', label: 'Produção', icon: '🔨' },
                       { id: 'balance', label: 'Balanço', icon: '💰' }
                     ].map((tab, idx) => (
                       <button 
@@ -1098,7 +819,7 @@ const App: React.FC = () => {
                  <div className="max-w-6xl mx-auto">
                     <div className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
                        <div className="space-y-2">
-                          <h3 className="text-3xl md:text-4xl font-serif text-slate-900 capitalize tracking-tight">{adminTab === 'products' ? (editingProduct ? 'Editando Peça' : 'Publicar Nova Peça') : adminTab === 'stock' ? 'Controle de Estoque' : adminTab === 'customizer' ? 'Configurações do Ateliê' : adminTab === 'balance' ? 'Balanço de Vendas' : 'Mural do Ateliê'}</h3>
+                          <h3 className="text-3xl md:text-4xl font-serif text-slate-900 capitalize tracking-tight">{adminTab === 'products' ? (editingProduct ? 'Editando Peça' : 'Publicar Nova Peça') : adminTab === 'stock' ? 'Controle de Estoque' : adminTab === 'customizer' ? 'Configurações do Ateliê' : adminTab === 'balance' ? 'Balanço de Vendas' : adminTab === 'production' ? 'Quadro de Produção' : 'Painel'}</h3>
                           <p className="text-slate-400 text-sm font-body-serif italic">Zele pela qualidade e apresentação dos seus artigos sacros.</p>
                        </div>
                        {adminTab === 'products' && editingProduct && (
@@ -1430,7 +1151,79 @@ const App: React.FC = () => {
                       </div>
                     )}
 
-                    {/* --- NOVA ABA DE BALANÇO FINANCEIRO --- */}
+                    {/* --- NOVA ABA DE PRODUÇÃO (KANBAN) --- */}
+                    {adminTab === 'production' && (
+                       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 animate-in fade-in">
+                          
+                          {/* Coluna A FAZER */}
+                          <div className="space-y-4">
+                             <div className="flex items-center gap-3 mb-4">
+                                <span className="w-3 h-3 rounded-full bg-slate-300"></span>
+                                <h4 className="font-black uppercase tracking-[0.2em] text-slate-500 text-xs">A Fazer</h4>
+                                <span className="text-xs bg-slate-200 px-2 py-0.5 rounded-full font-bold text-slate-600">{salesHistory.filter(s => !s.status || s.status === 'pending').length}</span>
+                             </div>
+                             <div className="bg-slate-100 p-4 rounded-[32px] min-h-[50vh] space-y-4">
+                                {salesHistory.filter(s => !s.status || s.status === 'pending').map(order => (
+                                   <div key={order.id} className="bg-white p-5 rounded-3xl shadow-sm border border-slate-200 group">
+                                      <p className="font-bold text-slate-800 mb-1">{order.description}</p>
+                                      <div className="flex justify-between items-end">
+                                         <span className="text-xs text-slate-400 font-bold">{order.date}</span>
+                                         <div className="flex gap-2">
+                                            <button onClick={() => updateSaleStatus(order.id, 'in_progress')} className="bg-blue-100 text-blue-600 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-blue-600 hover:text-white transition-all">Iniciar →</button>
+                                         </div>
+                                      </div>
+                                   </div>
+                                ))}
+                             </div>
+                          </div>
+
+                          {/* Coluna EM CONFECÇÃO */}
+                          <div className="space-y-4">
+                             <div className="flex items-center gap-3 mb-4">
+                                <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+                                <h4 className="font-black uppercase tracking-[0.2em] text-amber-600 text-xs">Em Confecção</h4>
+                                <span className="text-xs bg-amber-100 px-2 py-0.5 rounded-full font-bold text-amber-700">{salesHistory.filter(s => s.status === 'in_progress').length}</span>
+                             </div>
+                             <div className="bg-amber-50 p-4 rounded-[32px] min-h-[50vh] space-y-4 border border-amber-100">
+                                {salesHistory.filter(s => s.status === 'in_progress').map(order => (
+                                   <div key={order.id} className="bg-white p-5 rounded-3xl shadow-sm border border-amber-100 group">
+                                      <p className="font-bold text-slate-800 mb-1">{order.description}</p>
+                                      <div className="flex justify-between items-end">
+                                         <span className="text-xs text-slate-400 font-bold">{order.date}</span>
+                                         <div className="flex gap-2">
+                                            <button onClick={() => updateSaleStatus(order.id, 'pending')} className="bg-slate-100 text-slate-600 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-slate-200 transition-all">←</button>
+                                            <button onClick={() => updateSaleStatus(order.id, 'done')} className="bg-green-100 text-green-600 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-green-600 hover:text-white transition-all">Concluir →</button>
+                                         </div>
+                                      </div>
+                                   </div>
+                                ))}
+                             </div>
+                          </div>
+
+                          {/* Coluna PRONTOS */}
+                          <div className="space-y-4">
+                             <div className="flex items-center gap-3 mb-4">
+                                <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                                <h4 className="font-black uppercase tracking-[0.2em] text-green-600 text-xs">Prontos / Enviados</h4>
+                                <span className="text-xs bg-green-100 px-2 py-0.5 rounded-full font-bold text-green-700">{salesHistory.filter(s => s.status === 'done').length}</span>
+                             </div>
+                             <div className="bg-green-50 p-4 rounded-[32px] min-h-[50vh] space-y-4 border border-green-100">
+                                {salesHistory.filter(s => s.status === 'done').map(order => (
+                                   <div key={order.id} className="bg-white p-5 rounded-3xl shadow-sm border border-green-100 opacity-60 hover:opacity-100 transition-opacity">
+                                      <p className="font-bold text-slate-800 mb-1 line-through decoration-slate-300">{order.description}</p>
+                                      <div className="flex justify-between items-end">
+                                         <span className="text-xs text-slate-400 font-bold">{order.date}</span>
+                                         <button onClick={() => updateSaleStatus(order.id, 'in_progress')} className="bg-slate-100 text-slate-400 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-slate-200 transition-all">Retornar</button>
+                                      </div>
+                                   </div>
+                                ))}
+                             </div>
+                          </div>
+
+                       </div>
+                    )}
+
+                    {/* --- ABA DE BALANÇO FINANCEIRO --- */}
                     {adminTab === 'balance' && (
                       <div className="space-y-8 animate-in fade-in">
                         {/* Cartões de Resumo */}
@@ -1460,6 +1253,7 @@ const App: React.FC = () => {
                                    <button className="px-8 bg-green-600 text-white rounded-2xl font-black text-xl hover:bg-green-700 transition-all active:scale-95">+</button>
                                  </div>
                               </form>
+                              <p className="text-xs text-slate-400 mt-2 text-center">O pedido será adicionado automaticamente à fila de produção.</p>
                            </div>
                         </div>
 
@@ -1474,6 +1268,7 @@ const App: React.FC = () => {
                                   <tr>
                                      <th className="p-6">Data</th>
                                      <th className="p-6">Descrição</th>
+                                     <th className="p-6">Status</th>
                                      <th className="p-6 text-right">Valor</th>
                                      <th className="p-6 text-right">Ação</th>
                                   </tr>
@@ -1483,6 +1278,11 @@ const App: React.FC = () => {
                                      <tr key={sale.id} className="hover:bg-slate-50/50">
                                         <td className="p-6 text-xs font-bold text-slate-500">{sale.date}</td>
                                         <td className="p-6 font-medium text-slate-700">{sale.description}</td>
+                                        <td className="p-6">
+                                           <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${sale.status === 'done' ? 'bg-green-100 text-green-600' : sale.status === 'in_progress' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
+                                              {sale.status === 'done' ? 'Pronto' : sale.status === 'in_progress' ? 'Fazendo' : 'Pendente'}
+                                           </span>
+                                        </td>
                                         <td className="p-6 text-right font-black text-green-600">R$ {sale.value.toFixed(2)}</td>
                                         <td className="p-6 text-right">
                                           <button onClick={() => deleteSale(sale.id)} className="w-8 h-8 rounded-full bg-red-50 text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center">
@@ -1492,7 +1292,7 @@ const App: React.FC = () => {
                                      </tr>
                                    ))}
                                    {salesHistory.length === 0 && (
-                                     <tr><td colSpan={4} className="p-12 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>
+                                     <tr><td colSpan={5} className="p-12 text-center text-slate-400 italic">Nenhum registro encontrado.</td></tr>
                                    )}
                                 </tbody>
                              </table>
