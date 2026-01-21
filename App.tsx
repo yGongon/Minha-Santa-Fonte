@@ -12,13 +12,11 @@ import { Session } from '@supabase/supabase-js';
 import emailjs from '@emailjs/browser';
 
 const ITEMS_PER_PAGE = 8;
+const ADMIN_ITEMS_PER_PAGE = 5; // Paginação específica do Admin
 const WHATSAPP_NUMBER = "5575992257902"; 
 
 // --- CONFIGURAÇÃO DE E-MAIL (EmailJS) ---
 const EMAIL_CONFIG = {
-  // ATENÇÃO: O SERVICE_ID geralmente começa com "service_". 
-  // O nome "Minha santa fonte" pode ser apenas o nome de exibição.
-  // Verifique na aba "Email Services" do painel EmailJS se há um ID como "service_xxxxxxx".
   SERVICE_ID: "Minha santa fonte", 
   TEMPLATE_ID: "template_jf47pls", 
   PUBLIC_KEY: "VA3a0JkCjqXQUIec1"
@@ -65,6 +63,10 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<string>("recent");
   const [catalogPage, setCatalogPage] = useState(1);
+
+  // --- Estados da Tabela Admin (NOVO) ---
+  const [adminSearchTerm, setAdminSearchTerm] = useState("");
+  const [adminProductPage, setAdminProductPage] = useState(1);
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -145,14 +147,20 @@ const App: React.FC = () => {
 
   // --- Inicialização e Autenticação ---
   useEffect(() => {
-    // Verificar sessão ativa ao carregar
+    try {
+      emailjs.init({
+        publicKey: EMAIL_CONFIG.PUBLIC_KEY,
+      });
+    } catch (e) {
+      console.error("Erro ao inicializar EmailJS:", e);
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsAdmin(!!session);
       setLoadingAuth(false);
     });
 
-    // Escutar mudanças na autenticação (Login/Logout)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -167,7 +175,6 @@ const App: React.FC = () => {
   }, [currentPage]);
 
   const fetchData = async () => {
-    // 1. Produtos
     const { data: productsData } = await supabase.from('products').select('*').order('createdAt', { ascending: false });
     if (productsData && productsData.length > 0) {
       setProducts(productsData);
@@ -175,7 +182,6 @@ const App: React.FC = () => {
       setProducts(INITIAL_PRODUCTS.map(p => ({ ...p, images: p.images || [p.image], createdAt: Date.now() })));
     }
 
-    // 2. Vendas
     const { data: salesData } = await supabase.from('sales').select('*').order('id', { ascending: false });
     if (salesData) {
       const formattedSales = salesData.map((s: any) => ({
@@ -185,7 +191,6 @@ const App: React.FC = () => {
       setSalesHistory(formattedSales);
     }
 
-    // 3. Opções
     const { data: optionsData } = await supabase.from('custom_options').select('*');
     if (optionsData) {
       setMaterials(optionsData.filter((o: any) => o.type === 'material'));
@@ -197,7 +202,6 @@ const App: React.FC = () => {
       setCrucifixes(INITIAL_CRUCIFIXES);
     }
 
-    // 4. Config
     const { data: configData } = await supabase.from('config').select('value').eq('key', 'base_rosary_price').single();
     if (configData) setBaseRosaryPrice(Number(configData.value));
   };
@@ -206,7 +210,27 @@ const App: React.FC = () => {
     fetchData();
   }, []);
 
-  // --- Lógica de Login/Logout Seguro ---
+  // --- Cálculos de Paginação do Admin ---
+  const filteredAdminProducts = useMemo(() => {
+    let list = [...products];
+    if (adminSearchTerm.trim()) {
+      const term = adminSearchTerm.toLowerCase();
+      list = list.filter(p => p.name.toLowerCase().includes(term) || p.category.toLowerCase().includes(term));
+    }
+    return list;
+  }, [products, adminSearchTerm]);
+
+  const totalAdminPages = Math.ceil(filteredAdminProducts.length / ADMIN_ITEMS_PER_PAGE);
+  const paginatedAdminProducts = useMemo(() => {
+    const startIndex = (adminProductPage - 1) * ADMIN_ITEMS_PER_PAGE;
+    return filteredAdminProducts.slice(startIndex, startIndex + ADMIN_ITEMS_PER_PAGE);
+  }, [filteredAdminProducts, adminProductPage]);
+
+  // Resetar página quando muda a busca
+  useEffect(() => {
+    setAdminProductPage(1);
+  }, [adminSearchTerm]);
+
   const handleAdminLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoginError("");
@@ -222,7 +246,6 @@ const App: React.FC = () => {
     if (error) {
       setLoginError("Acesso negado: " + error.message);
     } else {
-      // O useEffect onAuthStateChange vai lidar com o redirecionamento e estado
       setCurrentPage(Page.AdminDashboard);
     }
   };
@@ -233,7 +256,6 @@ const App: React.FC = () => {
     setCurrentPage(Page.Home);
   };
 
-  // --- Funções Auxiliares de Banco de Dados ---
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProduct.images || newProduct.images.length === 0) {
@@ -294,7 +316,6 @@ const App: React.FC = () => {
     await supabase.from('products').update({ stock: newStock }).eq('id', id);
   };
 
-  // --- Funções de Variantes ---
   const addVariantToProduct = () => {
     if (!tempVariantName) return;
     const variant: ProductVariant = {
@@ -318,7 +339,6 @@ const App: React.FC = () => {
     }));
   };
 
-  // --- Funções do Ateliê ---
   const saveCustomOptions = async (type: 'material' | 'color' | 'crucifix', newOption: RosaryOption) => {
     const payload = { ...newOption, type };
     const { error } = await supabase.from('custom_options').upsert(payload);
@@ -366,22 +386,22 @@ const App: React.FC = () => {
     await supabase.from('config').upsert({ key: 'base_rosary_price', value: val.toString() });
   };
 
-  // --- Função para Enviar Notificação por E-mail ---
   const sendProductionNotification = async (sale: SaleEntry) => {
     try {
       const recipients = NOTIFICATION_EMAILS.join(',');
+      const templateParams = {
+        description: sale.description,
+        value: sale.value.toFixed(2),
+        date: sale.date,
+        to_name: "Equipe Minha Santa Fonte",
+        to_email: recipients
+      };
 
       const result = await emailjs.send(
         EMAIL_CONFIG.SERVICE_ID,
         EMAIL_CONFIG.TEMPLATE_ID,
-        {
-          description: sale.description,
-          value: sale.value.toFixed(2),
-          date: sale.date,
-          to_name: "Equipe Minha Santa Fonte",
-          to_email: recipients 
-        },
-        EMAIL_CONFIG.PUBLIC_KEY
+        templateParams,
+        { publicKey: EMAIL_CONFIG.PUBLIC_KEY }
       );
       
       console.log("E-mail enviado com sucesso:", result.text);
@@ -389,15 +409,16 @@ const App: React.FC = () => {
       
     } catch (error: any) {
       console.error("Erro detalhado do EmailJS:", error);
-      // Extrair mensagem de erro legível
-      const errorMessage = error?.text || error?.message || JSON.stringify(error);
-      
-      // Alerta DETALHADO para o usuário corrigir
-      alert(`O pedido foi salvo no sistema, mas houve um erro ao enviar o e-mail.\n\nERRO TÉCNICO: ${errorMessage}\n\nDICA: Verifique se o SERVICE_ID '${EMAIL_CONFIG.SERVICE_ID}' está correto. Geralmente ele é um código como 'service_123xyz' e não o nome.`);
+      let errorMessage = "Erro desconhecido.";
+      if (error && typeof error === 'object') {
+          errorMessage = error.text || error.message || JSON.stringify(error);
+      } else if (typeof error === 'string') {
+          errorMessage = error;
+      }
+      alert(`⚠️ O pedido foi salvo, mas o e-mail NÃO foi enviado.\n\nErro do Servidor: ${errorMessage}\n\nDICAS PARA CORRIGIR:\n1. Se o erro for "The service ID is invalid", verifique se o ID é realmente "${EMAIL_CONFIG.SERVICE_ID}".\n2. Se usar AdBlock, desative-o.`);
     }
   };
 
-  // --- Funções Financeiras/Produção ---
   const handleAddSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSale.description) return; 
@@ -419,8 +440,6 @@ const App: React.FC = () => {
     
     setSalesHistory([entry, ...salesHistory]);
     setNewSale({ description: '', value: '' });
-
-    // Enviar notificação por e-mail com os detalhes do pedido
     await sendProductionNotification(entry);
   };
 
@@ -442,7 +461,6 @@ const App: React.FC = () => {
     }
   };
 
-  // --- Funções Carrinho ---
   const addToCart = (product: Product) => {
     if (product.stock <= 0) {
       alert("Desculpe, este produto está temporariamente esgotado.");
@@ -509,7 +527,6 @@ const App: React.FC = () => {
   const cartTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const cartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
   
-  // --- Lógica Filtragem ---
   const filteredProducts = useMemo(() => {
     let list = [...products];
     if (searchTerm.trim()) {
@@ -587,7 +604,6 @@ const App: React.FC = () => {
     window.open(whatsappUrl, '_blank');
   };
 
-  // --- Ícones ---
   const IconCross = () => <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M11 2h2v7h7v2h-7v11h-2v-11h-7v-2h7v-7z" /></svg>;
   const IconCart = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>;
   const IconMenu = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16m-7 6h7" /></svg>;
@@ -1331,7 +1347,25 @@ const App: React.FC = () => {
 
                         {/* --- LISTA DE PRODUTOS CADASTRADOS (PARA EDIÇÃO/EXCLUSÃO) --- */}
                         <div className="mt-16 pt-16 border-t border-slate-200">
-                           <h4 className="text-2xl font-serif text-slate-900 mb-8">Acervo Cadastrado</h4>
+                           <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-6">
+                              <div>
+                                <h4 className="text-2xl font-serif text-slate-900">Acervo Cadastrado</h4>
+                                <p className="text-slate-400 text-xs mt-1 uppercase tracking-wider">{filteredAdminProducts.length} itens encontrados</p>
+                              </div>
+                              
+                              {/* Busca no Admin */}
+                              <div className="relative w-full md:w-80 group">
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-amber-600 transition-colors"><IconSearch /></div>
+                                <input 
+                                  type="text" 
+                                  placeholder="Buscar no acervo..." 
+                                  value={adminSearchTerm}
+                                  onChange={e => setAdminSearchTerm(e.target.value)}
+                                  className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10 text-sm font-medium transition-all shadow-sm"
+                                />
+                              </div>
+                           </div>
+
                            <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
                               <table className="w-full text-left">
                                 <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
@@ -1343,7 +1377,7 @@ const App: React.FC = () => {
                                    </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
-                                   {products.map(p => (
+                                   {paginatedAdminProducts.map(p => (
                                       <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
                                          <td className="p-4 w-24">
                                             <img src={p.image} className="w-16 h-16 rounded-2xl object-cover border border-slate-100 shadow-sm" alt={p.name} />
@@ -1378,8 +1412,32 @@ const App: React.FC = () => {
                                    ))}
                                 </tbody>
                               </table>
-                              {products.length === 0 && (
-                                 <div className="p-12 text-center text-slate-400 italic">Nenhum produto cadastrado ainda.</div>
+                              
+                              {paginatedAdminProducts.length === 0 && (
+                                 <div className="p-12 text-center text-slate-400 italic">Nenhum produto encontrado.</div>
+                              )}
+                              
+                              {/* Paginação do Admin */}
+                              {totalAdminPages > 1 && (
+                                <div className="p-6 border-t border-slate-50 flex justify-center items-center gap-4">
+                                   <button 
+                                     onClick={() => setAdminProductPage(p => Math.max(1, p - 1))}
+                                     disabled={adminProductPage === 1}
+                                     className={`p-2 rounded-lg transition-colors ${adminProductPage === 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}`}
+                                   >
+                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
+                                   </button>
+                                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                      Página {adminProductPage} de {totalAdminPages}
+                                   </span>
+                                   <button 
+                                     onClick={() => setAdminProductPage(p => Math.min(totalAdminPages, p + 1))}
+                                     disabled={adminProductPage === totalAdminPages}
+                                     className={`p-2 rounded-lg transition-colors ${adminProductPage === totalAdminPages ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}`}
+                                   >
+                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+                                   </button>
+                                </div>
                               )}
                            </div>
                         </div>
