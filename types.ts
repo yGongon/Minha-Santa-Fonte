@@ -2,6 +2,7 @@
 export interface ProductVariant {
   name: string;
   priceDelta: number; // Diferença de preço em relação ao base
+  image?: string; // URL da imagem específica desta variante
 }
 
 export interface Product {
